@@ -217,7 +217,7 @@ function useSquatCounter(onRep) {
     } else if (avgKnee > 150 && stateRef.current === "down") {
       stateRef.current = "up";
       countRef.current += 1;
-      onRep?.(countRef.current, avgKnee);
+      onRep?.(countRef.current, avgKnee, landmarks);
     }
     return avgKnee;
   }, [onRep]);
@@ -405,6 +405,7 @@ export default function Workout() {
   const [reps,         setReps]         = useState(0);
   const [sets,         setSets]         = useState(0);
   const [formScore,    setFormScore]    = useState(0);
+  const [jointScores,  setJointScores]  = useState({ hipDepth: 0, kneeTrack: 0, backAngle: 0, barPath: 0 });
   const [squatPhase,   setSquatPhase]   = useState(0);
   const [elapsed,      setElapsed]      = useState(0);
   const [feedback,     setFeedback]     = useState([]);
@@ -428,16 +429,33 @@ export default function Workout() {
     return ()    => clearInterval(timerRef.current);
   }, [isRunning]);
 
-  // Rep callback
-  const handleRep = useCallback((count, kneeAngle) => {
+  // Rep callback — receives rep count, knee angle, AND full landmarks for per-joint analysis
+  const handleRep = useCallback((count, kneeAngle, landmarks) => {
     setReps(count);
     if (count % 5 === 0) setSets((s) => s + 1);
-
-    const score = Math.min(99, Math.max(55, Math.round(
-      100 - Math.abs(kneeAngle - 90) * 0.3
-    )));
+    const score = Math.min(99, Math.max(55, Math.round(100 - Math.abs(kneeAngle - 90) * 0.3)));
     setFormScore(score);
     setSquatPhase(0);
+
+    if (landmarks) {
+      const lm = landmarks;
+      const angle3 = (A, B, C) => {
+        const ab = { x: lm[A].x - lm[B].x, y: lm[A].y - lm[B].y };
+        const cb = { x: lm[C].x - lm[B].x, y: lm[C].y - lm[B].y };
+        const dot = ab.x * cb.x + ab.y * cb.y;
+        const mag = Math.sqrt(ab.x**2 + ab.y**2) * Math.sqrt(cb.x**2 + cb.y**2);
+        return (Math.acos(Math.max(-1, Math.min(1, dot / (mag || 1))))) * (180 / Math.PI);
+      };
+      const avgHipAngle  = (angle3(11,23,25) + angle3(12,24,26)) / 2;
+      const hipDepth     = Math.min(99, Math.max(40, Math.round(100 - Math.abs(avgHipAngle - 90) * 0.9)));
+      const avgDev       = (Math.abs(lm[25].x - lm[27].x) + Math.abs(lm[26].x - lm[28].x)) / 2;
+      const kneeTrack    = Math.min(99, Math.max(40, Math.round(99 - avgDev * 250)));
+      const avgBack      = (angle3(11,23,25) + angle3(12,24,26)) / 2;
+      const backAngle    = Math.min(99, Math.max(40, Math.round(99 - Math.max(0, 170 - avgBack) * 1.5)));
+      const shoulderTilt = Math.abs(lm[11].y - lm[12].y);
+      const barPath      = Math.min(99, Math.max(40, Math.round(99 - shoulderTilt * 500)));
+      setJointScores({ hipDepth, kneeTrack, backAngle, barPath });
+    }
 
     const msgs = [
       score >= 85 ? "✅ Great depth — keep pushing!"  : "⚠ Try to go a bit deeper",
@@ -446,9 +464,8 @@ export default function Workout() {
       "✅ Good bar path — stay upright",
       score >= 80 ? "✅ Core braced nicely"            : "⚠ Brace your core harder",
     ];
-    const msg = msgs[count % msgs.length];
     setFeedback((prev) => [
-      { id: Date.now(), msg, time: new Date().toLocaleTimeString() },
+      { id: Date.now(), msg: msgs[count % msgs.length], time: new Date().toLocaleTimeString() },
       ...prev.slice(0, 6),
     ]);
   }, []);
@@ -540,12 +557,11 @@ export default function Workout() {
   const handlePause = () => setIsRunning(false);
 
   const handleReset = () => {
-    setIsRunning(false);
-    setCamActive(false);
+    setIsRunning(false); setCamActive(false);
     setReps(0); setSets(0); setElapsed(0);
     setFormScore(0); setSquatPhase(0);
-    setFeedback([]);
-    setCamError("");
+    setJointScores({ hipDepth: 0, kneeTrack: 0, backAngle: 0, barPath: 0 });
+    setFeedback([]); setCamError("");
   };
 
   const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
@@ -555,7 +571,7 @@ export default function Workout() {
 
       {/* ── Mode + Controls Bar ── */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, padding: "14px 20px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", flexWrap: "wrap", gap: 12 }}>
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, padding: "14px 16px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", flexWrap: "wrap", gap: 12 }}>
 
         {/* Mode toggle */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -604,7 +620,7 @@ export default function Workout() {
       </motion.div>
 
       {/* ── Main Grid ── */}
-      <div className="grid-sidebar" style={{ marginBottom: 16, gridTemplateColumns: "1fr 360px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginBottom: 16 }}>
 
         {/* Left col */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -690,7 +706,7 @@ export default function Workout() {
 
           {/* Live Metrics */}
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }}
-            className="grid-4col">
+            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
             {[
               { label: "TOTAL REPS", val: reps,    unit: "reps",    color: "var(--red)",     pulse: isRunning },
               { label: "SETS DONE",  val: sets,    unit: "sets",    color: "var(--warning)", pulse: false     },
@@ -739,10 +755,10 @@ export default function Workout() {
             <FormGauge score={formScore || 0} />
             <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
               {[
-                { label: "Hip Depth",  val: formScore > 0 ? Math.min(99, formScore + 5)  : 0, color: "var(--success)" },
-                { label: "Knee Track", val: formScore > 0 ? Math.max(55, formScore - 9)  : 0, color: "var(--warning)" },
-                { label: "Back Angle", val: formScore > 0 ? Math.min(99, formScore + 1)  : 0, color: "var(--success)" },
-                { label: "Bar Path",   val: formScore > 0 ? Math.min(99, formScore + 8)  : 0, color: "var(--success)" },
+                { label: "Hip Depth",  val: jointScores.hipDepth,  color: "var(--success)" },
+                { label: "Knee Track", val: jointScores.kneeTrack, color: "var(--warning)" },
+                { label: "Back Angle", val: jointScores.backAngle, color: "var(--success)" },
+                { label: "Bar Path",   val: jointScores.barPath,   color: "var(--success)" },
               ].map((b) => (
                 <div key={b.label}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
