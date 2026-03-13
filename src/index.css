@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════
    KAI FITNESS — Global Styles
-   index.css
+   index.css  — fully responsive
 ═══════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;600&display=swap');
@@ -45,10 +45,12 @@
   --font-body:     'DM Sans', sans-serif;
   --font-mono:     'JetBrains Mono', monospace;
 
-  /* Layout */
+  /* Layout — desktop defaults */
   --sidebar-w:     72px;
   --sidebar-w-exp: 220px;
   --topbar-h:      64px;
+  --bottom-nav-h:  0px;   /* set to 60px on mobile via media query */
+
   --radius-sm:     6px;
   --radius-md:     10px;
   --radius-lg:     14px;
@@ -138,6 +140,24 @@ body {
 .gap-12 { gap: 12px; }
 .gap-16 { gap: 16px; }
 .flex-1 { flex: 1; }
+
+/* ─── RESPONSIVE GRID HELPERS ─── */
+/* Use these instead of hardcoded gridTemplateColumns */
+.grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.grid-4col {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.grid-sidebar {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+}
 
 /* ─── CARD BASE ─── */
 .card {
@@ -261,6 +281,7 @@ body {
   transition: border-color var(--dur-fast) var(--ease-out),
               box-shadow var(--dur-fast) var(--ease-out);
   outline: none;
+  /* Prevent iOS zoom on focus — keep font-size ≥ 16px on mobile */
 }
 .input::placeholder { color: var(--text-muted); }
 .input:focus {
@@ -281,6 +302,7 @@ body {
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 .section-title {
   font-family: var(--font-display);
@@ -293,6 +315,7 @@ body {
   flex: 1;
   height: 1px;
   background: var(--border);
+  min-width: 20px;
 }
 
 /* ─── PAGE LAYOUT ─── */
@@ -308,6 +331,8 @@ body {
 .page-content {
   padding: 28px 32px;
   flex: 1;
+  /* Extra bottom padding so content isn't hidden by mobile bottom nav */
+  padding-bottom: calc(28px + var(--bottom-nav-h));
 }
 
 /* ─── OVERLAY / MODAL BACKDROP ─── */
@@ -351,56 +376,45 @@ body {
 @keyframes shimmer {
   to { left: 200%; }
 }
-
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-
 @keyframes slideDown {
   from { opacity: 0; transform: translateY(-12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes slideRight {
   from { opacity: 0; transform: translateX(-12px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-
 @keyframes cardIn {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes modalIn {
   from { opacity: 0; transform: scale(0.94) translateY(8px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
-
 @keyframes ping {
   0%   { transform: scale(0.8); opacity: 1; }
   100% { transform: scale(2);   opacity: 0; }
 }
-
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
 }
-
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
-
 @keyframes fabIn {
   from { opacity: 0; transform: scale(0) rotate(-180deg); }
   to   { opacity: 1; transform: scale(1) rotate(0deg); }
 }
-
 @keyframes scanLine {
   0%   { top: 0%; }
   100% { top: 100%; }
@@ -452,12 +466,137 @@ body {
   animation: spin 0.7s linear infinite;
 }
 
-/* ─── RESPONSIVE BREAKPOINTS ─── */
-@media (max-width: 1200px) {
-  .page-content { padding: 24px; }
+/* ══════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   ══════════════════════════════════════════════ */
+
+/* ── Large desktop (1400px+) ── */
+@media (min-width: 1400px) {
+  .page-content { padding: 32px 40px; }
 }
 
-@media (max-width: 768px) {
-  .page-wrapper { margin-left: 0; }
-  .page-content { padding: 16px; }
+/* ── Tablet landscape / small desktop (1024px–1199px) ── */
+@media (max-width: 1199px) {
+  .page-content { padding: 22px 24px; }
+  .grid-sidebar { grid-template-columns: 1fr 280px; }
+}
+
+/* ── Tablet portrait (768px–1023px) ── */
+@media (max-width: 1023px) {
+  :root {
+    --sidebar-w: 60px;
+  }
+  .page-content { padding: 18px 20px; }
+
+  /* Stack sidebar grids */
+  .grid-sidebar  { grid-template-columns: 1fr; }
+  .grid-4col     { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── Mobile (≤767px) — sidebar replaced by bottom nav ── */
+@media (max-width: 767px) {
+  :root {
+    --sidebar-w:      0px;
+    --topbar-h:       56px;
+    --bottom-nav-h:   60px;
+  }
+
+  /* Prevent text overflow */
+  body { font-size: 15px; }
+
+  .page-content {
+    padding: 14px 14px;
+    padding-bottom: calc(14px + var(--bottom-nav-h) + 8px);
+  }
+
+  /* All multi-column grids collapse to single column */
+  .grid-2col     { grid-template-columns: 1fr; }
+  .grid-4col     { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .grid-sidebar  { grid-template-columns: 1fr; }
+
+  /* Section title smaller on mobile */
+  .section-title { font-size: 16px; letter-spacing: 1px; }
+
+  /* Cards have less padding */
+  .card { padding: 14px; }
+
+  /* Modals fill more of screen */
+  .modal {
+    max-width: 100%;
+    border-radius: var(--radius-lg);
+    padding: 20px;
+  }
+
+  /* Input: force font-size 16px to prevent iOS auto-zoom */
+  .input,
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* ── Very small phones (≤374px) ── */
+@media (max-width: 374px) {
+  .grid-4col { grid-template-columns: repeat(2, 1fr); }
+  .page-content { padding: 10px; padding-bottom: calc(10px + var(--bottom-nav-h) + 8px); }
+}
+
+/* ─── MOBILE BOTTOM NAV (shown only on mobile) ─── */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--bottom-nav-h);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 200;
+    align-items: stretch;
+    /* Safe area for notched phones */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Hide sidebar entirely on mobile */
+  .sidebar-desktop {
+    display: none !important;
+  }
+}
+
+/* Hide bottom nav on desktop/tablet */
+@media (min-width: 768px) {
+  .mobile-bottom-nav {
+    display: none !important;
+  }
+  .sidebar-desktop {
+    display: flex !important;
+  }
+}
+
+/* ─── TOPBAR RESPONSIVE ─── */
+/* Hide live clock on small screens */
+@media (max-width: 600px) {
+  .topbar-clock {
+    display: none !important;
+  }
+  .topbar-title-main {
+    font-size: 22px !important;
+    letter-spacing: 2px !important;
+  }
+}
+
+/* ─── TOUCH TARGETS — minimum 44×44px on mobile ─── */
+@media (max-width: 767px) {
+  button, [role="button"], a {
+    min-height: 36px;
+  }
 }

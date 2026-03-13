@@ -258,11 +258,11 @@ export default function Progress() {
   const photosWithImg = entries.filter((e) => e.photo);
 
   return (
-    <div style={{ padding: "28px 32px" }}>
+    <div className="page-content">
 
       {/* Summary strip */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
-        style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
+        className="grid-4col" style={{ marginBottom: 20 }}>
         {[
           { label: "STARTING WEIGHT", val: entries.length > 0 ? `${startW} kg` : "—", color: "var(--text-dim)",  icon: "🏁" },
           { label: "CURRENT WEIGHT",  val: entries.length > 0 ? `${lastW} kg`  : "—", color: "var(--red)",       icon: "⚖️" },
@@ -282,7 +282,7 @@ export default function Progress() {
       </motion.div>
 
       {/* Chart + sidebar */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, marginBottom: 20 }}>
+      <div className="grid-sidebar" style={{ marginBottom: 20 }}>
 
         {/* Chart */}
         <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
@@ -390,8 +390,8 @@ export default function Progress() {
       </div>
 
       <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-        style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 20, alignItems: "start" }}>
-        <div style={{ width: 240 }}>
+        className="grid-sidebar" style={{ alignItems: "start" }}>
+        <div style={{ maxWidth: 320, width: "100%" }}>
           <ComparisonSlider
             before={entries[beforeIdx]}
             after={entries[afterIdx] || entries[entries.length - 1]}

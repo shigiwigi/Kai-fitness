@@ -396,37 +396,25 @@ function NotifPanel({ onClose }) {
  * Receives live `displayName` and `email` from Topbar (sourced from useAuth).
  * No hardcoded strings remain here.
  */
-function AvatarMenu({ displayName, email, onClose }) {
+function AvatarMenu({ displayName, email, onClose, onLogout }) {
   const navigate = useNavigate();
 
   const items = [
     {
       label: "View Profile",
-      action: () => {
-        navigate("/profile");
-        onClose();
-      },
+      action: () => { navigate("/profile"); onClose(); },
     },
     {
       label: "Settings",
-      action: () => {
-        navigate("/profile");
-        onClose();
-      },
+      action: () => { navigate("/profile"); onClose(); },
     },
     {
       label: "Hardware Config",
-      action: () => {
-        navigate("/profile");
-        onClose();
-      },
+      action: () => { navigate("/profile"); onClose(); },
     },
     {
       label: "Sign Out",
-      action: () => {
-        navigate("/login");
-        onClose();
-      },
+      action: () => { onLogout(); onClose(); },
       danger: true,
     },
   ];
@@ -529,14 +517,20 @@ export default function Topbar() {
   const avatarRef = useRef(null);
 
   // ── Auth ──────────────────────────────────────
-  // useAuth() must expose: { user, displayName, email }
-  // where displayName is user.displayName (Firebase) or a Firestore profile field.
-  const { currentUser } = useAuth();
-  const displayName = currentUser?.displayName || null;
-  const email       = currentUser?.email       || null;
+  const { currentUser, userProfile, logout } = useAuth();
+  const displayName = userProfile?.name  || null;
+  const email       = currentUser?.email || null;
 
   // Derive initials reactively — updates the moment currentUser resolves.
   const initials = getInitials(displayName || email || "");
+
+  const navigate = useNavigate();
+
+  // Real logout — calls Firebase signOut then redirects
+  const handleLogout = async () => {
+    try { await logout(); } catch (e) { console.error(e); }
+    navigate("/login");
+  };
 
   // ── Page meta ─────────────────────────────────
   const meta = PAGE_META[location.pathname] ?? {
@@ -572,15 +566,15 @@ export default function Topbar() {
         borderBottom: "1px solid var(--border)",
         display: "flex",
         alignItems: "center",
-        padding: "0 32px",
+        padding: "0 clamp(12px, 3vw, 32px)",
         position: "sticky",
         top: 0,
         zIndex: 50,
-        gap: 16,
+        gap: 10,
       }}
     >
       {/* ── Page Title (animates on route change) ── */}
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -590,11 +584,15 @@ export default function Topbar() {
             transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
           >
             <div
+              className="topbar-title-main"
               style={{
                 fontFamily: "var(--font-display)",
                 fontSize: 28,
                 letterSpacing: 3,
                 lineHeight: 1,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
               {meta.title}
@@ -606,6 +604,9 @@ export default function Topbar() {
                 marginTop: 3,
                 letterSpacing: 0.5,
                 fontFamily: "var(--font-mono)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
               {meta.subtitle}
@@ -615,9 +616,11 @@ export default function Topbar() {
       </div>
 
       {/* ── Right Controls ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {/* Live Clock */}
-        <LiveClock />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        {/* Live Clock — hidden on small screens via CSS class */}
+        <div className="topbar-clock">
+          <LiveClock />
+        </div>
 
         {/* Notification Bell */}
         <div ref={notifRef} style={{ position: "relative" }}>
@@ -712,6 +715,7 @@ export default function Topbar() {
                 displayName={displayName}
                 email={email}
                 onClose={() => setAvatarOpen(false)}
+                onLogout={handleLogout}
               />
             )}
           </AnimatePresence>

@@ -3,10 +3,9 @@
 //   Place at: src/App.jsx
 // ═══════════════════════════════════════════════
 
-import { useEffect } from "react";
 import {
   BrowserRouter, Routes, Route, Navigate,
-  useLocation, useNavigate,
+  useLocation,
 } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -80,9 +79,7 @@ function SplashLoader() {
           display: "flex", alignItems: "center", justifyContent: "center",
           fontFamily: "var(--font-display)", fontSize: 20, color: "#fff",
         }}
-      >
-        K
-      </motion.div>
+      >K</motion.div>
       <div style={{ fontFamily: "var(--font-display)", fontSize: 22, letterSpacing: 4, color: "var(--text-dim)" }}>
         K<span style={{ color: "var(--red)" }}>AI</span> FITNESS
       </div>
@@ -100,7 +97,12 @@ function AppLayout() {
 
   return (
     <div style={{ display: "flex", width: "100%", height: "100%" }}>
+      {/* Sidebar renders both desktop nav + mobile bottom nav.
+          CSS media queries handle which one is visible. */}
       <Sidebar />
+
+      {/* Main content area — marginLeft comes from CSS var,
+          which is 0 on mobile (sidebar hidden) */}
       <div style={{
         marginLeft: "var(--sidebar-w)",
         flex: 1,
@@ -108,6 +110,8 @@ function AppLayout() {
         flexDirection: "column",
         minHeight: "100vh",
         overflow: "hidden",
+        /* Smooth transition when sidebar width changes */
+        transition: "margin-left 0.28s cubic-bezier(0.4,0,0.2,1)",
       }}>
         <Topbar />
         <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
@@ -118,7 +122,7 @@ function AppLayout() {
   );
 }
 
-// ─── Login guard (redirect if already logged in) ─
+// ─── Login guard ─────────────────────────────────
 function LoginPage() {
   const { currentUser, authLoading } = useAuth();
   if (authLoading) return <SplashLoader />;

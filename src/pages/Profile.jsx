@@ -198,11 +198,11 @@ export default function Profile() {
   });
 
   return (
-    <div style={{ padding: "28px 32px" }}>
+    <div className="page-content">
 
       {/* Hero */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
-        style={{ marginBottom: 22, padding: "22px 26px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, position: "relative", overflow: "hidden", flexWrap: "wrap" }}>
+        style={{ marginBottom: 22, padding: "clamp(14px,3vw,22px) clamp(14px,3vw,26px)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, position: "relative", overflow: "hidden", flexWrap: "wrap" }}>
         <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: "linear-gradient(to bottom, var(--red), transparent)" }} />
         <div style={{ position: "absolute", right: 18, top: "50%", transform: "translateY(-50%)", fontFamily: "var(--font-display)", fontSize: 72, color: "rgba(255,255,255,0.02)", letterSpacing: 8, pointerEvents: "none" }}>PROFILE</div>
 
@@ -238,7 +238,7 @@ export default function Profile() {
       </motion.div>
 
       {/* Settings Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+      <div className="grid-2col" style={{ marginBottom: 16 }}>
 
         {/* Personal Info */}
         <Section title="PERSONAL INFO" icon="👤" delay={0.05}>
@@ -331,7 +331,7 @@ export default function Profile() {
         </Section>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="grid-2col">
 
         {/* Preferences */}
         <Section title="PREFERENCES" icon="⚙️" delay={0.15}>

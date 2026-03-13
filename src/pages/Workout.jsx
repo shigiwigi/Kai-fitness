@@ -374,7 +374,7 @@ function HologramModal({ onClose, phase }) {
             <Suspense fallback={null}><SquatScene phase={phase} /></Suspense>
           </Canvas>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", borderTop: "1px solid var(--border)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", borderTop: "1px solid var(--border)" }}>
           {[
             { label: "FEET",  tip: "Shoulder-width, toes 15–30° out" },
             { label: "KNEES", tip: "Track over toes, don't cave in"  },
@@ -551,14 +551,14 @@ export default function Workout() {
   const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
 
   return (
-    <div style={{ padding: "28px 32px" }}>
+    <div className="page-content">
 
       {/* ── Mode + Controls Bar ── */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
         style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, padding: "14px 20px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", flexWrap: "wrap", gap: 12 }}>
 
         {/* Mode toggle */}
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {[
             { id: "laptop",  label: "💻 LAPTOP MODE",        desc: "Webcam · MediaPipe AI"          },
             { id: "product", label: "📦 KAI SENSE + CORE",   desc: "ESP32-CAM · MPU6050 (coming soon)" },
@@ -604,7 +604,7 @@ export default function Workout() {
       </motion.div>
 
       {/* ── Main Grid ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 16, marginBottom: 16 }}>
+      <div className="grid-sidebar" style={{ marginBottom: 16, gridTemplateColumns: "1fr 360px" }}>
 
         {/* Left col */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -690,7 +690,7 @@ export default function Workout() {
 
           {/* Live Metrics */}
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }}
-            style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+            className="grid-4col">
             {[
               { label: "TOTAL REPS", val: reps,    unit: "reps",    color: "var(--red)",     pulse: isRunning },
               { label: "SETS DONE",  val: sets,    unit: "sets",    color: "var(--warning)", pulse: false     },

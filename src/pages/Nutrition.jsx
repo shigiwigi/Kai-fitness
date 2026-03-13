@@ -242,7 +242,7 @@ function CustomMealModal({ onClose, onAdd }) {
           <button onClick={onClose} style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text-dim)", width: 28, height: 28, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
         <form onSubmit={(e) => { e.preventDefault(); if (!f.name || !f.cal) return; onAdd({ name: f.name, brand: f.brand || "Custom", cal: +f.cal, protein: +f.protein || 0, carbs: +f.carbs || 0, fat: +f.fat || 0, fiber: 0, serving: f.serving }, 1); onClose(); }} style={{ padding: 20, display: "flex", flexDirection: "column", gap: 11 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 10 }}>
             {[
               { key: "name",    label: "FOOD NAME *", placeholder: "Brown Rice",    span: 2 },
               { key: "brand",   label: "BRAND",       placeholder: "Optional",      span: 1 },
@@ -335,7 +335,7 @@ export default function Nutrition() {
   const filtered = feedFilter === "all" ? meals : meals.filter((m) => m.type === feedFilter);
 
   return (
-    <div style={{ padding: "28px 32px" }}>
+    <div className="page-content">
       <AnimatePresence>{celebrate && <Confetti />}</AnimatePresence>
 
       {/* Goal Banner */}
@@ -356,13 +356,13 @@ export default function Nutrition() {
       </AnimatePresence>
 
       {/* Top row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 18 }}>
+      <div className="grid-2col" style={{ marginBottom: 18 }}>
 
         {/* Calorie summary */}
         <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
           style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: 20 }}>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 17, letterSpacing: 2, color: "var(--text-dim)", marginBottom: 14 }}>DAILY CALORIES</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 16 }}>
             {[
               { label: "CONSUMED",  val: totals.cal,  color: "var(--red)"     },
               { label: "REMAINING", val: remaining,   color: goalMet ? "var(--success)" : "var(--text)" },
@@ -415,7 +415,7 @@ export default function Nutrition() {
       </div>
 
       {/* Action buttons */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         <motion.button whileTap={{ scale: 0.97 }} onClick={() => setScanOpen(true)}
           style={{ padding: "9px 18px", background: "var(--red)", border: "none", borderRadius: "var(--radius-sm)", color: "#fff", fontFamily: "var(--font-display)", fontSize: 13, letterSpacing: 2, cursor: "pointer" }}>
           📷 SCAN BARCODE
