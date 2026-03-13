@@ -1,47 +1,42 @@
 // ═══════════════════════════════════════════════
 //   KAI FITNESS — App.jsx
-//   Main router + layout shell + page transitions
+//   Place at: src/App.jsx
 // ═══════════════════════════════════════════════
 
-import { useState } from "react";
+import { useEffect } from "react";
 import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
+  BrowserRouter, Routes, Route, Navigate,
+  useLocation, useNavigate,
 } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
-// Layout
-import Sidebar from "./components/Sidebar";
-import Topbar  from "./components/Topbar";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import Sidebar   from "./components/Sidebar";
+import Topbar    from "./components/Topbar";
+import Dashboard from "./pages/Dashboard";
+import Workout   from "./pages/Workout";
+import Nutrition from "./pages/Nutrition";
+import Progress  from "./pages/Progress";
+import Profile   from "./pages/Profile";
+import Login     from "./pages/Login";
 
-// Pages
-import Dashboard  from "./pages/Dashboard";
-import Workout    from "./pages/Workout";
-import Nutrition  from "./pages/Nutrition";
-import Progress   from "./pages/Progress";
-import Profile    from "./pages/Profile";
-import Login      from "./pages/Login";
-
-// ─── Page transition variants ───────────────────
-const pageVariants = {
-  initial: { opacity: 0, y: 14 },
-  animate: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] },
-  },
-  exit: {
-    opacity: 0,
-    y: -8,
-    transition: { duration: 0.18, ease: [0.4, 0, 0.2, 1] },
-  },
+// ─── Page meta ───────────────────────────────────
+export const PAGE_META = {
+  "/":          { title: "DASHBOARD",  subtitle: "KINETIC AI FITNESS · OVERVIEW"      },
+  "/workout":   { title: "WORKOUT",    subtitle: "KINETIC AI FITNESS · TRAINING HUB"  },
+  "/nutrition": { title: "NUTRITION",  subtitle: "KINETIC AI FITNESS · FUEL TRACKER"  },
+  "/progress":  { title: "PROGRESS",   subtitle: "KINETIC AI FITNESS · MEDIA VAULT"   },
+  "/profile":   { title: "PROFILE",    subtitle: "KINETIC AI FITNESS · SETTINGS"      },
 };
 
-// ─── Animated route wrapper ─────────────────────
-function PageTransition({ children }) {
+// ─── Page transition ─────────────────────────────
+const pageVariants = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } },
+  exit:    { opacity: 0, y: -6, transition: { duration: 0.16, ease: [0.4, 0, 0.2, 1] } },
+};
+
+function AnimatedRoutes() {
   const location = useLocation();
   return (
     <AnimatePresence mode="wait">
@@ -53,74 +48,94 @@ function PageTransition({ children }) {
         exit="exit"
         style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
       >
-        {children}
+        <Routes location={location}>
+          <Route path="/"          element={<Dashboard />} />
+          <Route path="/workout"   element={<Workout   />} />
+          <Route path="/nutrition" element={<Nutrition />} />
+          <Route path="/progress"  element={<Progress  />} />
+          <Route path="/profile"   element={<Profile   />} />
+          <Route path="*"          element={<Navigate to="/" replace />} />
+        </Routes>
       </motion.div>
     </AnimatePresence>
   );
 }
 
-// ─── Page meta map (for Topbar) ─────────────────
-export const PAGE_META = {
-  "/":          { title: "DASHBOARD",  subtitle: "KINETIC AI FITNESS · OVERVIEW" },
-  "/workout":   { title: "WORKOUT",    subtitle: "KINETIC AI FITNESS · TRAINING HUB" },
-  "/nutrition": { title: "NUTRITION",  subtitle: "KINETIC AI FITNESS · FUEL TRACKER" },
-  "/progress":  { title: "PROGRESS",   subtitle: "KINETIC AI FITNESS · MEDIA VAULT" },
-  "/profile":   { title: "PROFILE",    subtitle: "KINETIC AI FITNESS · SETTINGS" },
-};
+// ─── Full-screen loader ───────────────────────────
+function SplashLoader() {
+  return (
+    <div style={{
+      position: "fixed", inset: 0,
+      background: "var(--bg)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexDirection: "column", gap: 20, zIndex: 9999,
+    }}>
+      <motion.div
+        animate={{ boxShadow: ["0 0 0 0 rgba(232,25,44,0)", "0 0 24px 8px rgba(232,25,44,0.3)", "0 0 0 0 rgba(232,25,44,0)"] }}
+        transition={{ duration: 2, repeat: Infinity }}
+        style={{
+          width: 56, height: 56,
+          background: "var(--red)",
+          clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "var(--font-display)", fontSize: 20, color: "#fff",
+        }}
+      >
+        K
+      </motion.div>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 22, letterSpacing: 4, color: "var(--text-dim)" }}>
+        K<span style={{ color: "var(--red)" }}>AI</span> FITNESS
+      </div>
+      <div className="spinner" />
+    </div>
+  );
+}
 
-// ─── Protected layout (sidebar + topbar + page) ──
+// ─── Protected layout ────────────────────────────
 function AppLayout() {
-  const [isLoggedIn] = useState(true); // swap for real auth later
+  const { currentUser, authLoading } = useAuth();
 
-  if (!isLoggedIn) return <Navigate to="/login" replace />;
+  if (authLoading) return <SplashLoader />;
+  if (!currentUser) return <Navigate to="/login" replace />;
 
   return (
     <div style={{ display: "flex", width: "100%", height: "100%" }}>
       <Sidebar />
-
-      {/* Main column */}
-      <div
-        style={{
-          marginLeft: "var(--sidebar-w)",
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          minHeight: "100vh",
-          overflow: "hidden",
-        }}
-      >
+      <div style={{
+        marginLeft: "var(--sidebar-w)",
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        minHeight: "100vh",
+        overflow: "hidden",
+      }}>
         <Topbar />
-
-        {/* Scrollable page area */}
         <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
-          <PageTransition>
-            <Routes>
-              <Route path="/"          element={<Dashboard />} />
-              <Route path="/workout"   element={<Workout />} />
-              <Route path="/nutrition" element={<Nutrition />} />
-              <Route path="/progress"  element={<Progress />} />
-              <Route path="/profile"   element={<Profile />} />
-              {/* Catch-all → home */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </PageTransition>
+          <AnimatedRoutes />
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Root ────────────────────────────────────────
+// ─── Login guard (redirect if already logged in) ─
+function LoginPage() {
+  const { currentUser, authLoading } = useAuth();
+  if (authLoading) return <SplashLoader />;
+  if (currentUser) return <Navigate to="/" replace />;
+  return <Login />;
+}
+
+// ─── Root ─────────────────────────────────────────
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public */}
-        <Route path="/login" element={<Login />} />
-
-        {/* Protected — everything else */}
-        <Route path="/*" element={<AppLayout />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/*"     element={<AppLayout />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

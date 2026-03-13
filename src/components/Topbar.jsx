@@ -1,12 +1,27 @@
 // ═══════════════════════════════════════════════
 //   KAI FITNESS — Topbar.jsx
 //   Route-aware title · Live clock · Notifications
+//   Auth-aware: name / email / initials via useAuth()
 // ═══════════════════════════════════════════════
 
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { PAGE_META } from "../App";
+import { useAuth } from "../context/AuthContext";
+
+// ─── Helpers ─────────────────────────────────────
+/**
+ * Derive up-to-2-character initials from a display name.
+ * "Alex Kinetic" → "AK"
+ * "alex@kaifitness.io" (fallback) → "A"
+ */
+function getInitials(name = "") {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 // ─── Mock notifications ──────────────────────────
 const NOTIFICATIONS = [
@@ -57,15 +72,17 @@ function LiveClock() {
     return () => clearInterval(id);
   }, []);
 
-  const date = time.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day:     "2-digit",
-    month:   "short",
-    year:    "numeric",
-  }).toUpperCase();
+  const date = time
+    .toLocaleDateString("en-GB", {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
+    .toUpperCase();
 
   const clock = time.toLocaleTimeString("en-GB", {
-    hour:   "2-digit",
+    hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   });
@@ -114,38 +131,38 @@ function NotifPanel({ onClose }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -10, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0,   scale: 1 }}
-      exit={{    opacity: 0, y: -10, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.97 }}
       transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
       style={{
-        position:     "absolute",
-        top:          "calc(100% + 10px)",
-        right:        0,
-        width:        340,
-        background:   "var(--surface)",
-        border:       "1px solid var(--border-md)",
+        position: "absolute",
+        top: "calc(100% + 10px)",
+        right: 0,
+        width: 340,
+        background: "var(--surface)",
+        border: "1px solid var(--border-md)",
         borderRadius: "var(--radius-lg)",
-        boxShadow:    "var(--shadow-lg)",
-        zIndex:       600,
-        overflow:     "hidden",
+        boxShadow: "var(--shadow-lg)",
+        zIndex: 600,
+        overflow: "hidden",
       }}
     >
       {/* Header */}
       <div
         style={{
-          display:        "flex",
-          alignItems:     "center",
+          display: "flex",
+          alignItems: "center",
           justifyContent: "space-between",
-          padding:        "14px 16px",
-          borderBottom:   "1px solid var(--border)",
+          padding: "14px 16px",
+          borderBottom: "1px solid var(--border)",
         }}
       >
         <div
           style={{
-            fontFamily:   "var(--font-display)",
-            fontSize:     16,
+            fontFamily: "var(--font-display)",
+            fontSize: 16,
             letterSpacing: 2,
-            color:        "var(--text-dim)",
+            color: "var(--text-dim)",
           }}
         >
           NOTIFICATIONS
@@ -154,16 +171,16 @@ function NotifPanel({ onClose }) {
           <button
             onClick={markAll}
             style={{
-              background:   "transparent",
-              border:       "1px solid var(--border)",
+              background: "transparent",
+              border: "1px solid var(--border)",
               borderRadius: "var(--radius-sm)",
-              color:        "var(--text-dim)",
-              fontSize:     11,
-              padding:      "3px 8px",
-              cursor:       "pointer",
-              fontFamily:   "var(--font-mono)",
+              color: "var(--text-dim)",
+              fontSize: 11,
+              padding: "3px 8px",
+              cursor: "pointer",
+              fontFamily: "var(--font-mono)",
               letterSpacing: 0.5,
-              transition:   "all 0.2s",
+              transition: "all 0.2s",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = "var(--border-red)";
@@ -179,19 +196,19 @@ function NotifPanel({ onClose }) {
           <button
             onClick={onClose}
             style={{
-              background:   "transparent",
-              border:       "1px solid var(--border)",
+              background: "transparent",
+              border: "1px solid var(--border)",
               borderRadius: "var(--radius-sm)",
-              color:        "var(--text-dim)",
-              fontSize:     16,
-              width:        26,
-              height:       26,
-              cursor:       "pointer",
-              display:      "flex",
-              alignItems:   "center",
+              color: "var(--text-dim)",
+              fontSize: 16,
+              width: 26,
+              height: 26,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
               justifyContent: "center",
-              lineHeight:   1,
-              transition:   "all 0.2s",
+              lineHeight: 1,
+              transition: "all 0.2s",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = "var(--border-red)";
@@ -213,10 +230,10 @@ function NotifPanel({ onClose }) {
           {notifs.length === 0 ? (
             <div
               style={{
-                padding:   "32px 16px",
+                padding: "32px 16px",
                 textAlign: "center",
-                color:     "var(--text-muted)",
-                fontSize:  13,
+                color: "var(--text-muted)",
+                fontSize: 13,
               }}
             >
               No notifications
@@ -229,16 +246,18 @@ function NotifPanel({ onClose }) {
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                 transition={{ duration: 0.2 }}
                 style={{
-                  display:     "flex",
-                  gap:         12,
-                  padding:     "12px 16px",
+                  display: "flex",
+                  gap: 12,
+                  padding: "12px 16px",
                   borderBottom: "1px solid var(--border)",
-                  background:  n.unread ? "rgba(232,25,44,0.03)" : "transparent",
-                  position:    "relative",
-                  cursor:      "pointer",
-                  transition:  "background 0.2s",
+                  background: n.unread ? "rgba(232,25,44,0.03)" : "transparent",
+                  position: "relative",
+                  cursor: "pointer",
+                  transition: "background 0.2s",
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface2)")}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "var(--surface2)")
+                }
                 onMouseLeave={(e) =>
                   (e.currentTarget.style.background = n.unread
                     ? "rgba(232,25,44,0.03)"
@@ -249,13 +268,13 @@ function NotifPanel({ onClose }) {
                 {n.unread && (
                   <div
                     style={{
-                      position:     "absolute",
-                      top:          14,
-                      left:         6,
-                      width:        5,
-                      height:       5,
+                      position: "absolute",
+                      top: 14,
+                      left: 6,
+                      width: 5,
+                      height: 5,
                       borderRadius: "50%",
-                      background:   "var(--red)",
+                      background: "var(--red)",
                     }}
                   />
                 )}
@@ -263,16 +282,16 @@ function NotifPanel({ onClose }) {
                 {/* Icon */}
                 <div
                   style={{
-                    width:        36,
-                    height:       36,
+                    width: 36,
+                    height: 36,
                     borderRadius: "var(--radius-sm)",
-                    background:   "var(--surface3)",
-                    border:       "1px solid var(--border)",
-                    display:      "flex",
-                    alignItems:   "center",
+                    background: "var(--surface3)",
+                    border: "1px solid var(--border)",
+                    display: "flex",
+                    alignItems: "center",
                     justifyContent: "center",
-                    fontSize:     16,
-                    flexShrink:   0,
+                    fontSize: 16,
+                    flexShrink: 0,
                   }}
                 >
                   {n.icon}
@@ -282,9 +301,9 @@ function NotifPanel({ onClose }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
-                      fontSize:    13,
-                      fontWeight:  n.unread ? 600 : 400,
-                      color:       n.unread ? "var(--text)" : "var(--text-dim)",
+                      fontSize: 13,
+                      fontWeight: n.unread ? 600 : 400,
+                      color: n.unread ? "var(--text)" : "var(--text-dim)",
                       marginBottom: 3,
                     }}
                   >
@@ -292,10 +311,10 @@ function NotifPanel({ onClose }) {
                   </div>
                   <div
                     style={{
-                      fontSize:     11,
-                      color:        "var(--text-dim)",
-                      whiteSpace:   "nowrap",
-                      overflow:     "hidden",
+                      fontSize: 11,
+                      color: "var(--text-dim)",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
                       textOverflow: "ellipsis",
                     }}
                   >
@@ -303,10 +322,10 @@ function NotifPanel({ onClose }) {
                   </div>
                   <div
                     style={{
-                      fontSize:    10,
-                      color:       "var(--text-muted)",
-                      marginTop:   4,
-                      fontFamily:  "var(--font-mono)",
+                      fontSize: 10,
+                      color: "var(--text-muted)",
+                      marginTop: 4,
+                      fontFamily: "var(--font-mono)",
                     }}
                   >
                     {n.time}
@@ -315,21 +334,28 @@ function NotifPanel({ onClose }) {
 
                 {/* Dismiss */}
                 <button
-                  onClick={(e) => { e.stopPropagation(); dismiss(n.id); }}
-                  style={{
-                    background:   "transparent",
-                    border:       "none",
-                    color:        "var(--text-muted)",
-                    cursor:       "pointer",
-                    fontSize:     16,
-                    lineHeight:   1,
-                    padding:      "2px 4px",
-                    borderRadius: 4,
-                    transition:   "color 0.15s",
-                    alignSelf:    "flex-start",
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismiss(n.id);
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: 16,
+                    lineHeight: 1,
+                    padding: "2px 4px",
+                    borderRadius: 4,
+                    transition: "color 0.15s",
+                    alignSelf: "flex-start",
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.color = "var(--red)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.color = "var(--text-muted)")
+                  }
                 >
                   ×
                 </button>
@@ -342,18 +368,22 @@ function NotifPanel({ onClose }) {
       {/* Footer */}
       <div
         style={{
-          padding:        "10px 16px",
-          borderTop:      "1px solid var(--border)",
-          textAlign:      "center",
-          fontSize:       11,
-          color:          "var(--red)",
-          cursor:         "pointer",
-          fontFamily:     "var(--font-mono)",
-          letterSpacing:  0.5,
-          transition:     "background 0.2s",
+          padding: "10px 16px",
+          borderTop: "1px solid var(--border)",
+          textAlign: "center",
+          fontSize: 11,
+          color: "var(--red)",
+          cursor: "pointer",
+          fontFamily: "var(--font-mono)",
+          letterSpacing: 0.5,
+          transition: "background 0.2s",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--red-glow-sm)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.background = "var(--red-glow-sm)")
+        }
+        onMouseLeave={(e) =>
+          (e.currentTarget.style.background = "transparent")
+        }
       >
         VIEW ALL ACTIVITY
       </div>
@@ -362,52 +392,94 @@ function NotifPanel({ onClose }) {
 }
 
 // ─── Avatar Menu ─────────────────────────────────
-function AvatarMenu({ onClose }) {
+/**
+ * Receives live `displayName` and `email` from Topbar (sourced from useAuth).
+ * No hardcoded strings remain here.
+ */
+function AvatarMenu({ displayName, email, onClose }) {
   const navigate = useNavigate();
 
   const items = [
-    { label: "View Profile",   action: () => { navigate("/profile"); onClose(); } },
-    { label: "Settings",       action: () => { navigate("/profile"); onClose(); } },
-    { label: "Hardware Config",action: () => { navigate("/profile"); onClose(); } },
-    { label: "Sign Out",       action: () => { navigate("/login");   onClose(); }, danger: true },
+    {
+      label: "View Profile",
+      action: () => {
+        navigate("/profile");
+        onClose();
+      },
+    },
+    {
+      label: "Settings",
+      action: () => {
+        navigate("/profile");
+        onClose();
+      },
+    },
+    {
+      label: "Hardware Config",
+      action: () => {
+        navigate("/profile");
+        onClose();
+      },
+    },
+    {
+      label: "Sign Out",
+      action: () => {
+        navigate("/login");
+        onClose();
+      },
+      danger: true,
+    },
   ];
 
   return (
     <motion.div
       initial={{ opacity: 0, y: -10, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0,   scale: 1 }}
-      exit={{    opacity: 0, y: -10, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.97 }}
       transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
       style={{
-        position:     "absolute",
-        top:          "calc(100% + 10px)",
-        right:        0,
-        width:        200,
-        background:   "var(--surface)",
-        border:       "1px solid var(--border-md)",
+        position: "absolute",
+        top: "calc(100% + 10px)",
+        right: 0,
+        width: 200,
+        background: "var(--surface)",
+        border: "1px solid var(--border-md)",
         borderRadius: "var(--radius-lg)",
-        boxShadow:    "var(--shadow-lg)",
-        zIndex:       600,
-        overflow:     "hidden",
+        boxShadow: "var(--shadow-lg)",
+        zIndex: 600,
+        overflow: "hidden",
       }}
     >
-      {/* User info */}
+      {/* User info — live from auth */}
       <div
         style={{
-          padding:      "14px 16px",
+          padding: "14px 16px",
           borderBottom: "1px solid var(--border)",
         }}
       >
-        <div style={{ fontSize: 13, fontWeight: 600 }}>Alex Kinetic</div>
         <div
           style={{
-            fontSize:   11,
-            color:      "var(--text-dim)",
-            marginTop:  3,
-            fontFamily: "var(--font-mono)",
+            fontSize: 13,
+            fontWeight: 600,
+            // Graceful fallback if displayName hasn't loaded yet
+            color: displayName ? "var(--text)" : "var(--text-muted)",
           }}
         >
-          alex@kaifitness.io
+          {displayName || "Loading…"}
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: "var(--text-dim)",
+            marginTop: 3,
+            fontFamily: "var(--font-mono)",
+            // Truncate long addresses cleanly
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {email || ""}
         </div>
       </div>
 
@@ -418,10 +490,10 @@ function AvatarMenu({ onClose }) {
             key={item.label}
             onClick={item.action}
             style={{
-              padding:    "9px 16px",
-              fontSize:   13,
-              cursor:     "pointer",
-              color:      item.danger ? "var(--red)" : "var(--text-dim)",
+              padding: "9px 16px",
+              fontSize: 13,
+              cursor: "pointer",
+              color: item.danger ? "var(--red)" : "var(--text-dim)",
               transition: "all 0.15s",
               fontWeight: item.danger ? 500 : 400,
             }}
@@ -429,11 +501,15 @@ function AvatarMenu({ onClose }) {
               e.currentTarget.style.background = item.danger
                 ? "rgba(232,25,44,0.06)"
                 : "var(--surface2)";
-              e.currentTarget.style.color = item.danger ? "var(--red)" : "var(--text)";
+              e.currentTarget.style.color = item.danger
+                ? "var(--red)"
+                : "var(--text)";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.color = item.danger ? "var(--red)" : "var(--text-dim)";
+              e.currentTarget.style.color = item.danger
+                ? "var(--red)"
+                : "var(--text-dim)";
             }}
           >
             {item.label}
@@ -446,14 +522,25 @@ function AvatarMenu({ onClose }) {
 
 // ─── Topbar ──────────────────────────────────────
 export default function Topbar() {
-  const location              = useLocation();
+  const location = useLocation();
   const [notifOpen, setNotifOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
-  const notifRef  = useRef(null);
+  const notifRef = useRef(null);
   const avatarRef = useRef(null);
 
+  // ── Auth ──────────────────────────────────────
+  // useAuth() must expose: { user, displayName, email }
+  // where displayName is user.displayName (Firebase) or a Firestore profile field.
+  const { currentUser } = useAuth();
+  const displayName = currentUser?.displayName || null;
+  const email       = currentUser?.email       || null;
+
+  // Derive initials reactively — updates the moment currentUser resolves.
+  const initials = getInitials(displayName || email || "");
+
+  // ── Page meta ─────────────────────────────────
   const meta = PAGE_META[location.pathname] ?? {
-    title:    "KAI FITNESS",
+    title: "KAI FITNESS",
     subtitle: "KINETIC AI FITNESS",
   };
 
@@ -462,8 +549,10 @@ export default function Topbar() {
   // Close dropdowns on outside click
   useEffect(() => {
     function handler(e) {
-      if (notifRef.current  && !notifRef.current.contains(e.target))  setNotifOpen(false);
-      if (avatarRef.current && !avatarRef.current.contains(e.target)) setAvatarOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target))
+        setNotifOpen(false);
+      if (avatarRef.current && !avatarRef.current.contains(e.target))
+        setAvatarOpen(false);
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -478,16 +567,16 @@ export default function Topbar() {
   return (
     <div
       style={{
-        height:       "var(--topbar-h)",
-        background:   "var(--surface)",
+        height: "var(--topbar-h)",
+        background: "var(--surface)",
         borderBottom: "1px solid var(--border)",
-        display:      "flex",
-        alignItems:   "center",
-        padding:      "0 32px",
-        position:     "sticky",
-        top:          0,
-        zIndex:       50,
-        gap:          16,
+        display: "flex",
+        alignItems: "center",
+        padding: "0 32px",
+        position: "sticky",
+        top: 0,
+        zIndex: 50,
+        gap: 16,
       }}
     >
       {/* ── Page Title (animates on route change) ── */}
@@ -497,26 +586,26 @@ export default function Topbar() {
             key={location.pathname}
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{    opacity: 0, y:  8 }}
+            exit={{ opacity: 0, y: 8 }}
             transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
           >
             <div
               style={{
-                fontFamily:    "var(--font-display)",
-                fontSize:      28,
+                fontFamily: "var(--font-display)",
+                fontSize: 28,
                 letterSpacing: 3,
-                lineHeight:    1,
+                lineHeight: 1,
               }}
             >
               {meta.title}
             </div>
             <div
               style={{
-                fontSize:    11,
-                color:       "var(--text-dim)",
-                marginTop:   3,
+                fontSize: 11,
+                color: "var(--text-dim)",
+                marginTop: 3,
                 letterSpacing: 0.5,
-                fontFamily:  "var(--font-mono)",
+                fontFamily: "var(--font-mono)",
               }}
             >
               {meta.subtitle}
@@ -527,7 +616,6 @@ export default function Topbar() {
 
       {/* ── Right Controls ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-
         {/* Live Clock */}
         <LiveClock />
 
@@ -535,43 +623,51 @@ export default function Topbar() {
         <div ref={notifRef} style={{ position: "relative" }}>
           <motion.button
             whileTap={{ scale: 0.92 }}
-            onClick={() => { setNotifOpen((p) => !p); setAvatarOpen(false); }}
+            onClick={() => {
+              setNotifOpen((p) => !p);
+              setAvatarOpen(false);
+            }}
             style={{
-              width:        36,
-              height:       36,
-              background:   notifOpen ? "var(--surface3)" : "var(--surface2)",
-              border:       `1px solid ${notifOpen ? "var(--border-red)" : "var(--border)"}`,
+              width: 36,
+              height: 36,
+              background: notifOpen ? "var(--surface3)" : "var(--surface2)",
+              border: `1px solid ${notifOpen ? "var(--border-red)" : "var(--border)"}`,
               borderRadius: "var(--radius-sm)",
-              cursor:       "pointer",
-              display:      "flex",
-              alignItems:   "center",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
               justifyContent: "center",
-              position:     "relative",
-              color:        notifOpen ? "var(--red)" : "var(--text-dim)",
-              transition:   "all 0.2s",
+              position: "relative",
+              color: notifOpen ? "var(--red)" : "var(--text-dim)",
+              transition: "all 0.2s",
             }}
           >
-            {/* Bell icon */}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
-              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-              <path d="M13.73 21a2 2 0 01-3.46 0"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              width="16"
+              height="16"
+            >
+              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 01-3.46 0" />
             </svg>
 
-            {/* Unread badge */}
             {unreadCount > 0 && (
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 style={{
-                  position:     "absolute",
-                  top:          5,
-                  right:        5,
-                  width:        8,
-                  height:       8,
-                  background:   "var(--red)",
+                  position: "absolute",
+                  top: 5,
+                  right: 5,
+                  width: 8,
+                  height: 8,
+                  background: "var(--red)",
                   borderRadius: "50%",
-                  border:       "1.5px solid var(--surface)",
-                  animation:    "pulse 2s ease-in-out infinite",
+                  border: "1.5px solid var(--surface)",
+                  animation: "pulse 2s ease-in-out infinite",
                 }}
               />
             )}
@@ -582,32 +678,42 @@ export default function Topbar() {
           </AnimatePresence>
         </div>
 
-        {/* Avatar */}
+        {/* Avatar — initials derived from live auth data */}
         <div ref={avatarRef} style={{ position: "relative" }}>
           <motion.div
             whileTap={{ scale: 0.92 }}
-            onClick={() => { setAvatarOpen((p) => !p); setNotifOpen(false); }}
+            onClick={() => {
+              setAvatarOpen((p) => !p);
+              setNotifOpen(false);
+            }}
+            title={displayName || email || ""}
             style={{
-              width:        36,
-              height:       36,
-              background:   "linear-gradient(135deg, var(--red-dim), var(--red))",
+              width: 36,
+              height: 36,
+              background: "linear-gradient(135deg, var(--red-dim), var(--red))",
               borderRadius: "50%",
-              display:      "flex",
-              alignItems:   "center",
+              display: "flex",
+              alignItems: "center",
               justifyContent: "center",
-              fontWeight:   600,
-              fontSize:     13,
-              cursor:       "pointer",
-              border:       `2px solid ${avatarOpen ? "var(--red)" : "var(--border)"}`,
-              transition:   "border-color 0.2s",
-              userSelect:   "none",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+              border: `2px solid ${avatarOpen ? "var(--red)" : "var(--border)"}`,
+              transition: "border-color 0.2s",
+              userSelect: "none",
             }}
           >
-            AK
+            {initials}
           </motion.div>
 
           <AnimatePresence>
-            {avatarOpen && <AvatarMenu onClose={() => setAvatarOpen(false)} />}
+            {avatarOpen && (
+              <AvatarMenu
+                displayName={displayName}
+                email={email}
+                onClose={() => setAvatarOpen(false)}
+              />
+            )}
           </AnimatePresence>
         </div>
       </div>
