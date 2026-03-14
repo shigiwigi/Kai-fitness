@@ -576,7 +576,7 @@ export default function Workout() {
         {/* Mode toggle */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {[
-            { id: "laptop",  label: "💻 LAPTOP MODE",        desc: "Webcam · MediaPipe AI"          },
+            { id: "laptop",  label: "📷 DEVICE MODE",        desc: "Camera · MediaPipe AI"          },
             { id: "product", label: "📦 KAI SENSE + CORE",   desc: "ESP32-CAM · MPU6050 (coming soon)" },
           ].map((m) => (
             <motion.button key={m.id} whileTap={{ scale: 0.97 }}
@@ -681,7 +681,7 @@ export default function Workout() {
                   {!camActive && !camError && (
                     <div style={{ textAlign: "center", zIndex: 5 }}>
                       <div style={{ fontSize: 40, marginBottom: 10 }}>📷</div>
-                      <div style={{ fontFamily: "var(--font-display)", fontSize: 16, letterSpacing: 2, color: "var(--text-dim)", marginBottom: 6 }}>LAPTOP WEBCAM</div>
+                      <div style={{ fontFamily: "var(--font-display)", fontSize: 16, letterSpacing: 2, color: "var(--text-dim)", marginBottom: 6 }}>DEVICE CAMERA</div>
                       <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 16 }}>MediaPipe Pose · Real-time joint detection</div>
                       <motion.button whileTap={{ scale: 0.96 }} onClick={() => { setCamError(""); setCamActive(true); }}
                         style={{ padding: "9px 20px", background: "var(--red)", border: "none", borderRadius: "var(--radius-sm)", color: "#fff", fontFamily: "var(--font-display)", fontSize: 13, letterSpacing: 2, cursor: "pointer" }}>

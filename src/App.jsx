@@ -17,6 +17,7 @@ import Workout   from "./pages/Workout";
 import Nutrition from "./pages/Nutrition";
 import Progress  from "./pages/Progress";
 import Profile   from "./pages/Profile";
+import Settings  from "./pages/Settings";
 import Login     from "./pages/Login";
 
 // ─── Page meta ───────────────────────────────────
@@ -25,7 +26,8 @@ export const PAGE_META = {
   "/workout":   { title: "WORKOUT",    subtitle: "KINETIC AI FITNESS · TRAINING HUB"  },
   "/nutrition": { title: "NUTRITION",  subtitle: "KINETIC AI FITNESS · FUEL TRACKER"  },
   "/progress":  { title: "PROGRESS",   subtitle: "KINETIC AI FITNESS · MEDIA VAULT"   },
-  "/profile":   { title: "PROFILE",    subtitle: "KINETIC AI FITNESS · SETTINGS"      },
+  "/profile":   { title: "PROFILE",    subtitle: "KINETIC AI FITNESS · YOUR ACCOUNT"  },
+  "/settings":  { title: "SETTINGS",   subtitle: "KINETIC AI FITNESS · CONFIGURATION" },
 };
 
 // ─── Page transition ─────────────────────────────
@@ -53,6 +55,7 @@ function AnimatedRoutes() {
           <Route path="/nutrition" element={<Nutrition />} />
           <Route path="/progress"  element={<Progress  />} />
           <Route path="/profile"   element={<Profile   />} />
+          <Route path="/settings"  element={<Settings  />} />
           <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>
       </motion.div>
@@ -72,14 +75,14 @@ function SplashLoader() {
       <motion.div
         animate={{ boxShadow: ["0 0 0 0 rgba(232,25,44,0)", "0 0 24px 8px rgba(232,25,44,0.3)", "0 0 0 0 rgba(232,25,44,0)"] }}
         transition={{ duration: 2, repeat: Infinity }}
-        style={{
-          width: 56, height: 56,
-          background: "var(--red)",
-          clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "var(--font-display)", fontSize: 20, color: "#fff",
-        }}
-      >K</motion.div>
+      >
+        <svg width="56" height="56" viewBox="0 0 32 32" fill="none">
+          <rect width="32" height="32" rx="8" fill="#E8192C"/>
+          <line x1="9" y1="8" x2="9" y2="24" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="9" y1="16" x2="22" y2="8" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="9" y1="16" x2="22" y2="24" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+        </svg>
+      </motion.div>
       <div style={{ fontFamily: "var(--font-display)", fontSize: 22, letterSpacing: 4, color: "var(--text-dim)" }}>
         K<span style={{ color: "var(--red)" }}>AI</span> FITNESS
       </div>

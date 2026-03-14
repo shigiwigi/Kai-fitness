@@ -71,12 +71,12 @@ const NAV_ITEMS = [
 const BOTTOM_ITEMS = [
   {
     id: "settings",
-    path: "/profile",
+    path: "/settings",
     label: "Settings",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="20" height="20">
         <circle cx="12" cy="12" r="3"/>
-        <path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
       </svg>
     ),
   },
@@ -114,29 +114,23 @@ function DesktopSidebar() {
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 12,
-          padding: "20px 18px",
+          gap: 10,
+          padding: "0 16px",
           borderBottom: "1px solid var(--border)",
-          minHeight: 72,
+          minHeight: 64,
           cursor: "pointer",
+          overflow: "hidden",
         }}
         onClick={() => navigate("/")}
       >
-        <motion.div
-          animate={{
-            boxShadow: expanded
-              ? "0 0 18px 4px rgba(232,25,44,0.3)"
-              : "0 0 0 0 rgba(232,25,44,0)",
-          }}
-          transition={{ duration: 0.4 }}
-          style={{
-            width: 36, height: 36, flexShrink: 0,
-            background: "var(--red)",
-            clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "var(--font-display)", fontSize: 14, color: "#fff", letterSpacing: 1,
-          }}
-        >K</motion.div>
+        {/* Clean minimal logo mark: two diagonal lines forming a "K" shape */}
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
+          <rect width="32" height="32" rx="8" fill="#E8192C"/>
+          {/* K shape */}
+          <line x1="9" y1="8" x2="9" y2="24" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="9" y1="16" x2="22" y2="8" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="9" y1="16" x2="22" y2="24" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+        </svg>
 
         <AnimatePresence>
           {expanded && (
@@ -144,13 +138,12 @@ function DesktopSidebar() {
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -8 }}
-              transition={{ duration: 0.2 }}
-              style={{
-                fontFamily: "var(--font-display)", fontSize: 22,
-                letterSpacing: 4, whiteSpace: "nowrap", lineHeight: 1,
-              }}
+              transition={{ duration: 0.18 }}
+              style={{ display: "flex", alignItems: "baseline", gap: 0, whiteSpace: "nowrap" }}
             >
-              K<span style={{ color: "var(--red)" }}>AI</span>
+              <span style={{ fontFamily: "var(--font-display)", fontSize: 22, letterSpacing: 3, lineHeight: 1, color: "var(--text)" }}>K</span>
+              <span style={{ fontFamily: "var(--font-display)", fontSize: 22, letterSpacing: 3, lineHeight: 1, color: "var(--red)" }}>AI</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--text-muted)", letterSpacing: 2, marginLeft: 6, alignSelf: "center" }}>FIT</span>
             </motion.div>
           )}
         </AnimatePresence>

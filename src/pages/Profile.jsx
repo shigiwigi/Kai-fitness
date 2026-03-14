@@ -80,7 +80,38 @@ function DangerModal({ title, message, onClose, onConfirm }) {
   );
 }
 
-// ─── Calibration Modal ────────────────────────────
+// ─── NumInput — custom number field with +/− buttons ─
+function NumInput({ value, onChange, placeholder, min = 0, step = 1 }) {
+  const val = parseFloat(value) || 0;
+  const dec = step < 1 ? 1 : 0;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 0, background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+      <button
+        type="button"
+        onClick={() => onChange({ target: { value: Math.max(min, +(val - step).toFixed(dec)) } })}
+        style={{ width: 28, height: 34, background: "transparent", border: "none", borderRight: "1px solid var(--border)", color: "var(--text-dim)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface3)"; e.currentTarget.style.color = "var(--text)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-dim)"; }}
+      >−</button>
+      <input
+        type="number"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        style={{ width: 64, height: 34, background: "transparent", border: "none", color: "var(--text)", fontFamily: "var(--font-body)", fontSize: 13, textAlign: "center", outline: "none", MozAppearance: "textfield" }}
+      />
+      <button
+        type="button"
+        onClick={() => onChange({ target: { value: +(val + step).toFixed(dec) } })}
+        style={{ width: 28, height: 34, background: "transparent", border: "none", borderLeft: "1px solid var(--border)", color: "var(--text-dim)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface3)"; e.currentTarget.style.color = "var(--text)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-dim)"; }}
+      >+</button>
+    </div>
+  );
+}
+
+
 function CalibModal({ onClose }) {
   const [step, setStep]   = useState(0);
   const [prog, setProg]   = useState(0);
@@ -243,18 +274,26 @@ export default function Profile() {
         {/* Personal Info */}
         <Section title="PERSONAL INFO" icon="👤" delay={0.05}>
           {[
-            { key: "name",        label: "Full Name",       placeholder: "Alex Kinetic", w: 160 },
-            { key: "age",         label: "Age",             placeholder: "25",           w: 80, type: "number" },
-            { key: "height",      label: "Height (cm)",     placeholder: "175",          w: 80, type: "number" },
-            { key: "weight",      label: "Current Weight",  placeholder: "80.4",         w: 80, type: "number" },
-            { key: "goalWeight",  label: "Goal Weight",     placeholder: "78",           w: 80, type: "number" },
+            { key: "name",       label: "Full Name",      placeholder: "Alex Kinetic", type: "text", w: 160 },
           ].map((f) => (
             <Row key={f.key} label={f.label}>
-              <input style={inputStyle(f.w)} type={f.type || "text"} value={form[f.key] || ""} onChange={setInput(f.key)} placeholder={f.placeholder}
+              <input style={inputStyle(f.w)} type="text" value={form[f.key] || ""} onChange={setInput(f.key)} placeholder={f.placeholder}
                 onFocus={(e) => (e.target.style.borderColor = "var(--border-red)")}
                 onBlur={(e)  => (e.target.style.borderColor = "var(--border)")} />
             </Row>
           ))}
+          <Row label="Age">
+            <NumInput value={form.age || ""} onChange={setInput("age")} placeholder="25" min={1} step={1} />
+          </Row>
+          <Row label="Height (cm)">
+            <NumInput value={form.height || ""} onChange={setInput("height")} placeholder="175" min={50} step={1} />
+          </Row>
+          <Row label="Current Weight">
+            <NumInput value={form.weight || ""} onChange={setInput("weight")} placeholder="80.4" min={20} step={0.1} />
+          </Row>
+          <Row label="Goal Weight">
+            <NumInput value={form.goalWeight || ""} onChange={setInput("goalWeight")} placeholder="78" min={20} step={0.1} />
+          </Row>
           <Row label="Gender">
             <div style={{ display: "flex", gap: 6 }}>
               {["male","female"].map((g) => (
@@ -335,84 +374,23 @@ export default function Profile() {
 
         {/* Preferences */}
         <Section title="PREFERENCES" icon="⚙️" delay={0.15}>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "var(--font-mono)", letterSpacing: 1, marginBottom: 8 }}>MEASUREMENT UNITS</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {["metric","imperial"].map((u) => (
-                <button key={u} onClick={() => setForm((p) => ({ ...p, units: u }))}
-                  style={{ flex: 1, padding: "7px", borderRadius: "var(--radius-sm)", border: `1px solid ${form.units === u ? "var(--red)" : "var(--border)"}`, background: form.units === u ? "rgba(232,25,44,0.08)" : "transparent", color: form.units === u ? "var(--red)" : "var(--text-dim)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: 1, transition: "all 0.2s" }}>
-                  {u.toUpperCase()}<div style={{ fontSize: 8, color: "var(--text-muted)", marginTop: 2 }}>{u === "metric" ? "kg · cm" : "lbs · in"}</div>
-                </button>
-              ))}
-            </div>
+          <div style={{ padding: "20px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 12, fontFamily: "var(--font-mono)" }}>
+            Preferences have moved to{" "}
+            <span
+              onClick={() => navigate("/settings")}
+              style={{ color: "var(--red)", cursor: "pointer", textDecoration: "underline" }}
+            >Settings →</span>
           </div>
-          {[
-            { key: "notifications", label: "Notifications",       desc: "Reminders & milestones"         },
-            { key: "soundFeedback", label: "Audio Form Feedback",  desc: "Voice cues during sets"         },
-            { key: "repCountBeep",  label: "Rep Count Beep",       desc: "Beep on each completed rep"     },
-            { key: "autoStartCam",  label: "Auto-start Camera",    desc: "Open cam on Workout page entry" },
-            { key: "restTimer",     label: "Rest Timer",           desc: "Countdown between sets"         },
-          ].map((s) => (
-            <Row key={s.key} label={s.label} desc={s.desc}>
-              <Toggle value={form[s.key] ?? true} onChange={set(s.key)} />
-            </Row>
-          ))}
-          <motion.button whileTap={{ scale: 0.97 }} onClick={() => saveSection(["units","notifications","soundFeedback","repCountBeep","autoStartCam","restTimer"])} disabled={saving}
-            style={{ marginTop: 14, width: "100%", padding: "9px", background: "var(--red)", border: "none", borderRadius: "var(--radius-sm)", color: "#fff", fontFamily: "var(--font-display)", fontSize: 12, letterSpacing: 2, cursor: "pointer" }}>
-            SAVE PREFERENCES
-          </motion.button>
         </Section>
 
         {/* Account */}
         <Section title="ACCOUNT" icon="🔐" delay={0.2}>
-          <Row label="Email" desc="Your login email">
-            <span style={{ fontSize: 11, color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>{form.email}</span>
-          </Row>
-          <Row label="Activity Stats" desc="Across all time">
-            <div style={{ display: "flex", gap: 8 }}>
-              {[{ label: "workouts", val: statsCount.workouts }, { label: "meals", val: statsCount.meals }, { label: "weigh-ins", val: statsCount.entries }].map((s) => (
-                <div key={s.label} style={{ textAlign: "center", padding: "5px 8px", background: "var(--surface3)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
-                  <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--red)", letterSpacing: 1 }}>{s.val}</div>
-                  <div style={{ fontSize: 8, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-          </Row>
-          <Row label="Change Password">
-            <button onClick={() => showToast("Password reset email sent")} style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text-dim)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: 0.5, transition: "all 0.2s" }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--border-md)"; e.currentTarget.style.color = "var(--text)"; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-dim)"; }}>SEND RESET</button>
-          </Row>
-          <Row label="Sign Out">
-            <button onClick={handleLogout} style={{ padding: "5px 12px", background: "rgba(232,25,44,0.07)", border: "1px solid var(--border-red)", borderRadius: "var(--radius-sm)", color: "var(--red)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: 0.5, transition: "all 0.2s" }}>SIGN OUT</button>
-          </Row>
-
-          {/* Danger zone */}
-          <div style={{ marginTop: 18, padding: 14, background: "rgba(232,25,44,0.04)", border: "1px solid rgba(232,25,44,0.2)", borderRadius: "var(--radius-md)" }}>
-            <div style={{ fontFamily: "var(--font-display)", fontSize: 13, letterSpacing: 2, color: "var(--red)", marginBottom: 10 }}>DANGER ZONE</div>
-            <Row label="Reset All Data" desc="Delete all meals, workouts & weight entries" danger>
-              <button
-                onClick={() => setDanger({ title: "RESET ALL DATA", message: "This permanently deletes all your meals, workouts, and weight entries. Cannot be undone.", onConfirm: () => { setDanger(null); showToast("Data reset (feature coming soon)"); } })}
-                style={{ padding: "5px 10px", background: "rgba(232,25,44,0.08)", border: "1px solid var(--border-red)", borderRadius: "var(--radius-sm)", color: "var(--red)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: 0.5 }}>
-                RESET
-              </button>
-            </Row>
-            <Row label="Delete Account" desc="Permanently remove your account" danger>
-              <button
-                onClick={() => setDanger({ title: "DELETE ACCOUNT", message: "Your account and all data will be permanently deleted. This is irreversible.", onConfirm: () => { setDanger(null); handleLogout(); } })}
-                style={{ padding: "5px 10px", background: "rgba(232,25,44,0.08)", border: "1px solid var(--border-red)", borderRadius: "var(--radius-sm)", color: "var(--red)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: 0.5 }}>
-                DELETE
-              </button>
-            </Row>
-          </div>
-
-          {/* App info */}
-          <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
-            <div style={{ fontFamily: "var(--font-display)", fontSize: 12, letterSpacing: 2, color: "var(--text-muted)", marginBottom: 8 }}>APP INFO</div>
-            {[["Version","KAI Fitness v1.0.0"],["Firebase","Firestore + Auth + RTDB"],["AI","MediaPipe Pose"],["Build","2026.03.14"]].map(([k,v]) => (
-              <div key={k} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "5px 0", borderBottom: "1px solid var(--border)" }}>
-                <span style={{ color: "var(--text-dim)" }}>{k}</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-muted)" }}>{v}</span>
-              </div>
-            ))}
+          <div style={{ padding: "20px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 12, fontFamily: "var(--font-mono)" }}>
+            Account settings have moved to{" "}
+            <span
+              onClick={() => navigate("/settings")}
+              style={{ color: "var(--red)", cursor: "pointer", textDecoration: "underline" }}
+            >Settings →</span>
           </div>
         </Section>
       </div>

@@ -485,7 +485,7 @@ export default function Dashboard() {
               {[
                 { name: "KAI SENSE",    desc: `ESP32-CAM · ${profile.boxAIP || "192.168.1.42"}:${profile.streamPort || "81"}`, online: false, badge: "HARDWARE PENDING" },
                 { name: "KAI CORE",     desc: `MPU6050 · Port ${profile.boxBPort || "8080"}`, online: false, badge: "HARDWARE PENDING" },
-                { name: "Laptop Webcam",desc: `Default cam · ${profile.defaultCam === "laptop" ? "Selected" : "Standby"}`, online: profile.defaultCam !== "product", badge: profile.defaultCam === "laptop" ? "ACTIVE" : "STANDBY" },
+                { name: "Device Camera",desc: `Default cam · ${profile.defaultCam === "laptop" ? "Selected" : "Standby"}`, online: profile.defaultCam !== "product", badge: profile.defaultCam === "laptop" ? "ACTIVE" : "STANDBY" },
               ].map((d, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", transition: "all 0.2s" }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--border-red)"; }}

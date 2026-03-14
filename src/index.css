@@ -600,3 +600,19 @@ body {
     min-height: 36px;
   }
 }
+
+/* ─── HIDE UGLY NUMBER INPUT SPINNERS ─── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ─── HIDE FAB ON MOBILE (replaced by bottom nav) ─── */
+@media (max-width: 767px) {
+  .fab { display: none !important; }
+}
