@@ -11,7 +11,8 @@ import {
   collection, query, where, orderBy,
   onSnapshot, limit, Timestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { ref as rtdbRef, onValue, off } from "firebase/database";
+import { db, rtdb } from "../lib/firebase";
 import { useAuth } from "../context/AuthContext";
 
 // ─── Helpers ─────────────────────────────────────
@@ -165,6 +166,13 @@ export default function Dashboard() {
   const [feedFilter,     setFeedFilter]     = useState("all");
   const [loading,        setLoading]        = useState(true);
 
+  // ── KAI SENSE live sensor data from RTDB ──────
+  // Device ID comes from user's profile (boxAIP field stores it)
+  // Falls back gracefully if not configured
+  const [kaiSenseOnline,  setKaiSenseOnline]  = useState(false);
+  const [kaiSenseData,    setKaiSenseData]    = useState(null);
+  const [hipLean,         setHipLean]         = useState(0);
+
   useEffect(() => {
     if (!currentUser) return;
     const uid = currentUser.uid;
@@ -187,6 +195,31 @@ export default function Dashboard() {
 
     return () => { unsubMeals(); unsubWorkouts(); unsubWeight(); };
   }, [currentUser]);
+
+  // ── KAI SENSE RTDB listener ──
+  // Uses device ID from profile (stored as kaiDeviceId field)
+  // If not set, reads from the devices/ node to auto-detect
+  useEffect(() => {
+    if (!currentUser || !rtdb) return;
+    const deviceId = profile?.kaiDeviceId || userProfile?.kaiDeviceId;
+    if (!deviceId) return;
+    const devRef = rtdbRef(rtdb, `devices/${deviceId}`);
+    const unsub = onValue(devRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.val();
+        setKaiSenseData(data);
+        setKaiSenseOnline(true);
+        if (data?.accel) {
+          const { x, y, z } = data.accel;
+          const lean = Math.round(Math.atan2(x, Math.sqrt(y*y + z*z)) * (180 / Math.PI));
+          setHipLean(lean);
+        }
+      } else {
+        setKaiSenseOnline(false);
+      }
+    }, () => setKaiSenseOnline(false));
+    return () => off(devRef);
+  }, [currentUser, userProfile]);
 
   // ── Derived values ──
   const profile      = userProfile || {};
@@ -483,9 +516,28 @@ export default function Dashboard() {
             <div style={{ fontFamily: "var(--font-display)", fontSize: 15, letterSpacing: 2, color: "var(--text-dim)", marginBottom: 12 }}>DEVICE STATUS</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {[
-                { name: "KAI SENSE",    desc: `ESP32-CAM · ${profile.boxAIP || "192.168.1.42"}:${profile.streamPort || "81"}`, online: false, badge: "HARDWARE PENDING" },
-                { name: "KAI CORE",     desc: `MPU6050 · Port ${profile.boxBPort || "8080"}`, online: false, badge: "HARDWARE PENDING" },
-                { name: "Device Camera",desc: `Default cam · ${profile.defaultCam === "laptop" ? "Selected" : "Standby"}`, online: profile.defaultCam !== "product", badge: profile.defaultCam === "laptop" ? "ACTIVE" : "STANDBY" },
+                {
+                  name:   "KAI SENSE",
+                  desc:   kaiSenseOnline
+                    ? `Hip lean: ${hipLean > 0 ? "+" : ""}${hipLean}° · Live MPU6050`
+                    : profile.kaiDeviceId
+                      ? `Device ${profile.kaiDeviceId} · Offline`
+                      : "Set Device ID in Profile → Hardware Config",
+                  online: kaiSenseOnline,
+                  badge:  kaiSenseOnline ? "LIVE" : profile.kaiDeviceId ? "OFFLINE" : "NOT SET",
+                },
+                {
+                  name:  "KAI CORE",
+                  desc:  `MPU6050 · Port ${profile.boxBPort || "8080"}`,
+                  online: kaiSenseOnline,
+                  badge:  kaiSenseOnline ? "ACTIVE" : "STANDBY",
+                },
+                {
+                  name:  "Device Camera",
+                  desc:  `Default cam · ${profile.defaultCam === "laptop" ? "Selected" : "Standby"}`,
+                  online: profile.defaultCam !== "product",
+                  badge:  profile.defaultCam === "laptop" ? "ACTIVE" : "STANDBY",
+                },
               ].map((d, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", transition: "all 0.2s" }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--border-red)"; }}
@@ -502,6 +554,44 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+
+            {/* Live sensor mini-panel when KAI SENSE connected */}
+            {kaiSenseOnline && kaiSenseData && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+                style={{ marginTop: 10, padding: "10px 12px", background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: "var(--radius-md)" }}>
+                <div style={{ fontSize: 9, color: "var(--success)", fontFamily: "var(--font-mono)", letterSpacing: 1, marginBottom: 8 }}>● LIVE SENSOR DATA</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+                  {[
+                    { label: "AX", val: kaiSenseData.accel?.x ?? 0 },
+                    { label: "AY", val: kaiSenseData.accel?.y ?? 0 },
+                    { label: "AZ", val: kaiSenseData.accel?.z ?? 0 },
+                  ].map((s) => (
+                    <div key={s.label} style={{ textAlign: "center", padding: "4px 6px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                      <div style={{ fontSize: 8, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{s.label}</div>
+                      <div style={{ fontSize: 11, fontFamily: "var(--font-display)", color: "var(--text)", letterSpacing: 0.5 }}>{s.val.toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Hip lean bar */}
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
+                    <span>HIP LEAN</span>
+                    <span style={{ color: Math.abs(hipLean) <= 8 ? "var(--success)" : "var(--warning)" }}>
+                      {hipLean > 0 ? "+" : ""}{hipLean}°
+                    </span>
+                  </div>
+                  <div style={{ height: 4, background: "var(--surface3)", borderRadius: 2, position: "relative", overflow: "hidden" }}>
+                    <div style={{
+                      position: "absolute", height: "100%", borderRadius: 2,
+                      background: Math.abs(hipLean) <= 8 ? "var(--success)" : "var(--warning)",
+                      left:  hipLean < 0 ? `${50 + Math.max(-50, hipLean * 1.5)}%` : "50%",
+                      right: hipLean > 0 ? `${50 - Math.min(50, hipLean * 1.5)}%` : "50%",
+                      transition: "all 0.3s",
+                    }} />
+                  </div>
+                </div>
+              </motion.div>
+            )}
           </motion.div>
         </div>
 

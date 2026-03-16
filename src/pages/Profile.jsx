@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth, calcBMR, calcCalorieGoal } from "../context/AuthContext";
 import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../lib/firebase";
 
 // ─── Toggle ───────────────────────────────────────
 function Toggle({ value, onChange }) {
@@ -339,6 +339,11 @@ export default function Profile() {
               onFocus={(e) => (e.target.style.borderColor = "var(--border-red)")}
               onBlur={(e)  => (e.target.style.borderColor = "var(--border)")} />
           </Row>
+          <Row label="KAI Device ID" desc="MAC address shown in Arduino Serial Monitor">
+            <input style={inputStyle(150)} value={form.kaiDeviceId || ""} onChange={setInput("kaiDeviceId")} placeholder="6CC84034002C"
+              onFocus={(e) => (e.target.style.borderColor = "var(--border-red)")}
+              onBlur={(e)  => (e.target.style.borderColor = "var(--border)")} />
+          </Row>
           <Row label="Stream Port" desc="MJPEG stream port">
             <input style={inputStyle(70)} value={form.streamPort || ""} onChange={setInput("streamPort")} placeholder="81"
               onFocus={(e) => (e.target.style.borderColor = "var(--border-red)")}
@@ -362,7 +367,7 @@ export default function Profile() {
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
               ⚡ CALIBRATE KAI SENSE (MPU6050)
             </motion.button>
-            <motion.button whileTap={{ scale: 0.97 }} onClick={() => saveSection(["defaultCam","boxAIP","streamPort","boxBPort","ultrasonicOn","autoDetect"])} disabled={saving}
+            <motion.button whileTap={{ scale: 0.97 }} onClick={() => saveSection(["defaultCam","boxAIP","kaiDeviceId","streamPort","boxBPort","ultrasonicOn","autoDetect"])} disabled={saving}
               style={{ width: "100%", padding: "9px", background: "var(--red)", border: "none", borderRadius: "var(--radius-sm)", color: "#fff", fontFamily: "var(--font-display)", fontSize: 12, letterSpacing: 2, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               {saving ? <div className="spinner" style={{ width: 13, height: 13 }} /> : "SAVE HARDWARE CONFIG"}
             </motion.button>

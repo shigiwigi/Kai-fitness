@@ -72,14 +72,25 @@ function SplashLoader() {
       display: "flex", alignItems: "center", justifyContent: "center",
       flexDirection: "column", gap: 20, zIndex: 9999,
     }}>
+      {/* Logo with circular glow — outer div is a circle so the boxShadow pulses round */}
       <motion.div
-        animate={{ boxShadow: ["0 0 0 0 rgba(232,25,44,0)", "0 0 24px 8px rgba(232,25,44,0.3)", "0 0 0 0 rgba(232,25,44,0)"] }}
-        transition={{ duration: 2, repeat: Infinity }}
+        animate={{ boxShadow: [
+          "0 0 0px 0px rgba(232,25,44,0)",
+          "0 0 28px 10px rgba(232,25,44,0.28)",
+          "0 0 0px 0px rgba(232,25,44,0)",
+        ]}}
+        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+        style={{
+          width: 72, height: 72,
+          borderRadius: "50%",           // circular container = circular glow
+          background: "transparent",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}
       >
         <svg width="56" height="56" viewBox="0 0 32 32" fill="none">
           <rect width="32" height="32" rx="8" fill="#E8192C"/>
-          <line x1="9" y1="8" x2="9" y2="24" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
-          <line x1="9" y1="16" x2="22" y2="8" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="9" y1="8"  x2="9"  y2="24" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="9" y1="16" x2="22" y2="8"  stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
           <line x1="9" y1="16" x2="22" y2="24" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
         </svg>
       </motion.div>

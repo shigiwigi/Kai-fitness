@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth, calcCalorieGoal } from "../context/AuthContext";
 import { collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
-import { db, auth } from "../firebase";
+import { db, auth } from "../lib/firebase";
 
 // ─── Toggle ───────────────────────────────────────
 function Toggle({ value, onChange }) {

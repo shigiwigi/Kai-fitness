@@ -24,44 +24,8 @@ function getInitials(name = "") {
 }
 
 // ─── Mock notifications ──────────────────────────
-const NOTIFICATIONS = [
-  {
-    id: 1,
-    type: "workout",
-    icon: "🏋️",
-    title: "Workout Reminder",
-    message: "Squat session scheduled in 30 minutes.",
-    time: "5m ago",
-    unread: true,
-  },
-  {
-    id: 2,
-    type: "nutrition",
-    icon: "🔥",
-    title: "Calorie Goal",
-    message: "You're 560 kcal away from your daily goal.",
-    time: "1h ago",
-    unread: true,
-  },
-  {
-    id: 3,
-    type: "device",
-    icon: "📡",
-    title: "Box A Connected",
-    message: "ESP32-CAM is online and streaming.",
-    time: "2h ago",
-    unread: false,
-  },
-  {
-    id: 4,
-    type: "progress",
-    icon: "📉",
-    title: "Weight Update",
-    message: "You're down 0.4 kg this week. Keep going!",
-    time: "Yesterday",
-    unread: false,
-  },
-];
+// ─── Notifications — starts empty, real notifications can be added via Firestore ─
+const NOTIFICATIONS = [];
 
 // ─── Live Clock ──────────────────────────────────
 function LiveClock() {

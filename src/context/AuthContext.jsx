@@ -16,7 +16,7 @@ import {
 import {
   doc, getDoc, setDoc, updateDoc, serverTimestamp,
 } from "firebase/firestore";
-import { auth, db } from "../firebase";
+import { auth, db } from "../lib/firebase";
 
 const AuthContext = createContext(null);
 

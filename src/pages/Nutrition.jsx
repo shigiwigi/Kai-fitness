@@ -11,7 +11,7 @@ import {
   query, where, orderBy, onSnapshot,
   serverTimestamp, Timestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../lib/firebase";
 import { useAuth } from "../context/AuthContext";
 
 // ─────────────────────────────────────────────────
@@ -47,28 +47,38 @@ async function searchUSDA(query) {
 }
 
 // ─── Open Food Facts barcode lookup ──────────────
+// Adds 5s timeout so it never hangs forever
 async function fetchByBarcode(barcode) {
-  const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode.trim()}.json`);
-  if (!res.ok) throw new Error("Network error");
-  const data = await res.json();
-  if (data.status !== 1 || !data.product) {
-    // Fallback: also try USDA barcode search
-    return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(
+      `https://world.openfoodfacts.org/api/v0/product/${barcode.trim()}.json`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error("Network error");
+    const data = await res.json();
+    if (data.status !== 1 || !data.product) return null;
+    const p = data.product;
+    const n = p.nutriments || {};
+    const hasSrv = n["energy-kcal_serving"] != null;
+    return {
+      name:    p.product_name || p.abbreviated_product_name || "Unknown Product",
+      brand:   p.brands       || "Unknown Brand",
+      serving: p.serving_size || (hasSrv ? "1 serving" : "100g"),
+      cal:     Math.round(hasSrv ? n["energy-kcal_serving"]    : n["energy-kcal_100g"]    ?? 0),
+      protein: Math.round(((hasSrv ? n["proteins_serving"]      : n["proteins_100g"]      ?? 0)) * 10) / 10,
+      carbs:   Math.round(((hasSrv ? n["carbohydrates_serving"] : n["carbohydrates_100g"] ?? 0)) * 10) / 10,
+      fat:     Math.round(((hasSrv ? n["fat_serving"]           : n["fat_100g"]           ?? 0)) * 10) / 10,
+      fiber:   Math.round(((hasSrv ? n["fiber_serving"]         : n["fiber_100g"]         ?? 0)) * 10) / 10,
+      barcode,
+    };
+  } catch (e) {
+    clearTimeout(timeout);
+    if (e.name === "AbortError") throw new Error("timeout");
+    throw e;
   }
-  const p = data.product;
-  const n = p.nutriments || {};
-  const hasSrv = n["energy-kcal_serving"] != null;
-  return {
-    name:    p.product_name || p.abbreviated_product_name || "Unknown Product",
-    brand:   p.brands       || "Unknown Brand",
-    serving: p.serving_size || (hasSrv ? "1 serving" : "100g"),
-    cal:     Math.round(hasSrv ? n["energy-kcal_serving"]    : n["energy-kcal_100g"]    ?? 0),
-    protein: Math.round(((hasSrv ? n["proteins_serving"]      : n["proteins_100g"]      ?? 0)) * 10) / 10,
-    carbs:   Math.round(((hasSrv ? n["carbohydrates_serving"] : n["carbohydrates_100g"] ?? 0)) * 10) / 10,
-    fat:     Math.round(((hasSrv ? n["fat_serving"]           : n["fat_100g"]           ?? 0)) * 10) / 10,
-    fiber:   Math.round(((hasSrv ? n["fiber_serving"]         : n["fiber_100g"]         ?? 0)) * 10) / 10,
-    barcode,
-  };
 }
 
 // ─── BarcodeDetector helper ──────────────────────
@@ -181,19 +191,32 @@ function FoodSearchModal({ onClose, onAdd }) {
   const handleBarcodeFound = async (code) => {
     setBarcodeCode(code);
     setLoading(true); setError(""); setResults([]); setSelected(null);
+    setTab("search"); // switch to search tab to show loading state clearly
     try {
       const food = await fetchByBarcode(code);
       if (food) {
         setSelected(food);
-        setTab("search"); // switch to result view
       } else {
-        // No barcode result — search by code as text fallback
-        setError(`No packaged product found for ${code}. Try searching by name.`);
-        setTab("search");
-        setQuery(code);
+        // Not in Open Food Facts — search USDA by barcode as keyword
+        setError(`Barcode ${code} not in Open Food Facts. Searching USDA…`);
+        try {
+          const usdaResults = await searchUSDA(code);
+          if (usdaResults.length > 0) {
+            setResults(usdaResults);
+            setError("");
+          } else {
+            setError(`No product found for barcode ${code}. Try searching by name.`);
+          }
+        } catch {
+          setError(`No product found for barcode ${code}. Try searching by name.`);
+        }
       }
-    } catch {
-      setError("Network error. Check your connection.");
+    } catch (e) {
+      if (e.message === "timeout") {
+        setError("Open Food Facts is slow right now. Try searching by name instead.");
+      } else {
+        setError("Network error — check your connection.");
+      }
     } finally {
       setLoading(false);
     }
@@ -348,12 +371,30 @@ function FoodSearchModal({ onClose, onAdd }) {
                   style={{ paddingRight:44 }}
                 />
                 {loading ? (
-                  <div className="spinner" style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", width:16, height:16 }} />
-                ) : query && (
+                  <svg style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", animation:"spin 0.7s linear infinite", width:16, height:16 }}
+                    viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="9" stroke="var(--surface3)" strokeWidth="3"/>
+                    <path d="M12 3a9 9 0 019 9" stroke="var(--red)" strokeWidth="3" strokeLinecap="round"/>
+                  </svg>
+                ) : query ? (
                   <button onClick={() => { setQuery(""); setResults([]); setSelected(null); inputRef.current?.focus(); }}
                     style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"transparent", border:"none", color:"var(--text-muted)", cursor:"pointer", fontSize:16, lineHeight:1 }}>×</button>
-                )}
+                ) : null}
               </div>
+
+              {/* Loading overlay when fetching barcode */}
+              {loading && barcodeCode && (
+                <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 14px", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"var(--radius-md)" }}>
+                  <svg style={{ animation:"spin 0.7s linear infinite", width:18, height:18, flexShrink:0 }} viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="9" stroke="var(--surface3)" strokeWidth="3"/>
+                    <path d="M12 3a9 9 0 019 9" stroke="var(--red)" strokeWidth="3" strokeLinecap="round"/>
+                  </svg>
+                  <span style={{ fontSize:12, fontFamily:"var(--font-mono)", color:"var(--text-dim)" }}>
+                    Looking up barcode {barcodeCode}…
+                  </span>
+                </motion.div>
+              )}
 
               {/* Quick search pills */}
               {!query && !selected && (

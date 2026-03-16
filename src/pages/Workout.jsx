@@ -7,17 +7,161 @@
 import { useState, useEffect, useRef, Suspense, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Sphere, Cylinder, Box } from "@react-three/drei";
-import * as THREE from "three";
-// MediaPipe loaded dynamically from CDN — no npm package needed
+import { OrbitControls, Sphere, Cylinder } from "@react-three/drei";
 import { useAuth } from "../context/AuthContext";
-import {
-  collection, addDoc, serverTimestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../lib/firebase";
 
 // ═══════════════════════════════════════════════
-//  MEDIAPIPE HOOK
+//  VOICE FEEDBACK ENGINE
+//  Uses Web Speech API (SpeechSynthesis) — free,
+//  built into every browser, works offline.
+// ═══════════════════════════════════════════════
+
+// Feedback message library — specific, actionable coaching cues
+const VOICE_CUES = {
+  // Rep milestones
+  repMilestone: (n) => {
+    if (n === 1)  return "First rep. Nice start.";
+    if (n === 5)  return "5 reps. Keep that rhythm.";
+    if (n === 10) return "10 reps. Excellent work.";
+    if (n === 15) return "15 reps. You're on fire.";
+    if (n === 20) return "20 reps. Outstanding.";
+    if (n % 10 === 0) return `${n} reps. Keep pushing.`;
+    return null;
+  },
+
+  // Form cues — called per joint that's failing
+  hipDepth: (score) => {
+    if (score >= 85) return null; // good, stay quiet
+    if (score >= 70) return "Drive your hips a little lower.";
+    return "Hip crease needs to break parallel. Squat deeper.";
+  },
+  kneeTrack: (score) => {
+    if (score >= 85) return null;
+    if (score >= 70) return "Push your knees out over your toes.";
+    return "Knees caving in. Drive them wide.";
+  },
+  backAngle: (score) => {
+    if (score >= 85) return null;
+    if (score >= 70) return "Chest up slightly.";
+    return "Too much forward lean. Brace your core and stay upright.";
+  },
+  barPath: (score) => {
+    if (score >= 85) return null;
+    if (score >= 70) return "Keep the bar centered.";
+    return "Bar is tilting. Even out both sides.";
+  },
+
+  // Overall score cues (only spoken every few reps to avoid spam)
+  overallGood:  () => ["Perfect form.", "Excellent technique.", "Beautiful squat.", "Great rep."][Math.floor(Math.random()*4)],
+  overallOk:    () => ["Good rep, stay focused.", "Solid effort.", "Keep tightening that form."][Math.floor(Math.random()*3)],
+  overallBad:   () => ["Focus on your form.", "Slow down and control it.", "Quality over speed."][Math.floor(Math.random()*3)],
+
+  // Set complete
+  setComplete:  (n) => `Set ${n} complete. Rest up.`,
+
+  // Encouragement (random, every ~8 reps)
+  encourage: () => ["Keep it up.", "You got this.", "Stay strong.", "Breathe and push."][Math.floor(Math.random()*4)],
+};
+
+// ─── useTTS hook ──────────────────────────────────
+function useTTS(enabled) {
+  const queueRef    = useRef([]);
+  const speakingRef = useRef(false);
+  const voiceRef    = useRef(null);
+  const enabledRef  = useRef(enabled);
+  // Sync ref synchronously on every render (not just in effect)
+  enabledRef.current = enabled;
+
+  // Pick best English voice
+  useEffect(() => {
+    const pickVoice = () => {
+      const voices = window.speechSynthesis?.getVoices() || [];
+      // Prefer natural voices
+      const preferred = [
+        "Google UK English Male", "Google US English",
+        "Microsoft David - English (United States)",
+        "Alex", "Daniel", "Karen", "Samantha",
+      ];
+      for (const name of preferred) {
+        const v = voices.find((v) => v.name === name);
+        if (v) { voiceRef.current = v; return; }
+      }
+      voiceRef.current = voices.find((v) => v.lang?.startsWith("en")) || null;
+    };
+    pickVoice();
+    window.speechSynthesis?.addEventListener("voiceschanged", pickVoice);
+    return () => window.speechSynthesis?.removeEventListener("voiceschanged", pickVoice);
+  }, []);
+
+  // Chrome bug: speechSynthesis pauses itself after ~15s of inactivity
+  // Fix: call resume() periodically while speaking
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (window.speechSynthesis?.paused) window.speechSynthesis.resume();
+    }, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const processQueue = useCallback(() => {
+    if (speakingRef.current || queueRef.current.length === 0) return;
+    if (!window.speechSynthesis) return;
+    const text = queueRef.current.shift();
+    const utt  = new SpeechSynthesisUtterance(text);
+    utt.voice  = voiceRef.current || null;
+    utt.lang   = "en-US";
+    utt.rate   = 0.95;   // slightly slower = clearer mid-workout
+    utt.pitch  = 1.0;
+    utt.volume = 1.0;
+    utt.onend  = () => { speakingRef.current = false; setTimeout(processQueue, 100); };
+    utt.onerror= (e) => {
+      // "interrupted" is fine (we cancelled deliberately), ignore it
+      if (e.error !== "interrupted") console.warn("TTS error:", e.error);
+      speakingRef.current = false;
+      setTimeout(processQueue, 100);
+    };
+    speakingRef.current = true;
+    window.speechSynthesis.speak(utt);
+  }, []);
+
+  // Stable speak — reads enabledRef so this NEVER recreates
+  const speak = useCallback((text, priority = false) => {
+    if (!enabledRef.current || !text || !window.speechSynthesis) return;
+    if (queueRef.current.includes(text)) return;
+    if (priority) {
+      window.speechSynthesis.cancel();
+      speakingRef.current = false;
+      queueRef.current = [text];
+    } else {
+      if (queueRef.current.length < 2) queueRef.current.push(text);
+    }
+    // Small delay ensures cancel() has fully resolved before new speak
+    setTimeout(processQueue, priority ? 80 : 0);
+  }, [processQueue]); // no enabled dep
+
+  // Unlock browser autoplay — must be called on a direct user gesture (button click)
+  // Uses real text because Chrome ignores empty utterances
+  const unlock = useCallback(() => {
+    if (!window.speechSynthesis) return;
+    // Speak a real but silent-ish word to unlock the audio context
+    const utt = new SpeechSynthesisUtterance(".");
+    utt.volume = 0.01;
+    utt.rate   = 10;   // super fast so it's imperceptible
+    utt.onend  = () => {};
+    window.speechSynthesis.speak(utt);
+  }, []);
+
+  const stop = useCallback(() => {
+    window.speechSynthesis?.cancel();
+    queueRef.current    = [];
+    speakingRef.current = false;
+  }, []);
+
+  return { speak, stop, unlock };
+}
+
+
 // ═══════════════════════════════════════════════
 function useMediaPipePose({ videoRef, canvasRef, enabled, onPoseResult }) {
   const poseRef    = useRef(null);
@@ -190,127 +334,249 @@ function useMediaPipePose({ videoRef, canvasRef, enabled, onPoseResult }) {
 }
 
 // ═══════════════════════════════════════════════
-//  SQUAT COUNTER LOGIC
+//  SQUAT COUNTER — fixed with smoothing + cooldown
 // ═══════════════════════════════════════════════
 function useSquatCounter(onRep) {
-  const stateRef = useRef("up"); // "up" | "down"
-  const countRef = useRef(0);
+  const stateRef        = useRef("up");
+  const countRef        = useRef(0);
+  const angleHistRef    = useRef([]);
+  const cooldownRef     = useRef(false);
+  const minAngleRef     = useRef(180);
+  // Store landmarks captured at the DEEPEST point of the squat
+  // so form analysis reflects actual squat depth, not the stand-up position
+  const deepestLandmarks = useRef(null);
+
+  const calcAngle = (lm, a, b, c) => {
+    const ab = { x: lm[a].x - lm[b].x, y: lm[a].y - lm[b].y };
+    const cb = { x: lm[c].x - lm[b].x, y: lm[c].y - lm[b].y };
+    const dot   = ab.x * cb.x + ab.y * cb.y;
+    const magAB = Math.sqrt(ab.x**2 + ab.y**2);
+    const magCB = Math.sqrt(cb.x**2 + cb.y**2);
+    return (Math.acos(Math.max(-1, Math.min(1, dot / ((magAB * magCB) || 1))))) * (180 / Math.PI);
+  };
 
   const processLandmarks = useCallback((landmarks) => {
     if (!landmarks) return 180;
     const lm = landmarks;
-    const calcAngle = (a, b, c) => {
-      const ab = { x: lm[a].x - lm[b].x, y: lm[a].y - lm[b].y };
-      const cb = { x: lm[c].x - lm[b].x, y: lm[c].y - lm[b].y };
-      const dot   = ab.x * cb.x + ab.y * cb.y;
-      const magAB = Math.sqrt(ab.x ** 2 + ab.y ** 2);
-      const magCB = Math.sqrt(cb.x ** 2 + cb.y ** 2);
-      return (Math.acos(Math.max(-1, Math.min(1, dot / (magAB * magCB))))) * (180 / Math.PI);
-    };
 
-    const leftKnee  = calcAngle(23, 25, 27);
-    const rightKnee = calcAngle(24, 26, 28);
-    const avgKnee   = (leftKnee + rightKnee) / 2;
+    const rawLeft  = calcAngle(lm, 23, 25, 27);
+    const rawRight = calcAngle(lm, 24, 26, 28);
+    const rawAngle = (rawLeft + rawRight) / 2;
 
-    if (avgKnee < 110 && stateRef.current === "up") {
-      stateRef.current = "down";
-    } else if (avgKnee > 150 && stateRef.current === "down") {
-      stateRef.current = "up";
-      countRef.current += 1;
-      onRep?.(countRef.current, avgKnee, landmarks);
+    const hist = angleHistRef.current;
+    hist.push(rawAngle);
+    if (hist.length > 5) hist.shift();
+    const smoothAngle = hist.reduce((s, v) => s + v, 0) / hist.length;
+
+    if (smoothAngle < 100 && stateRef.current === "up" && !cooldownRef.current) {
+      stateRef.current   = "down";
+      minAngleRef.current = smoothAngle;
+      deepestLandmarks.current = landmarks; // capture initial deep landmarks
     }
-    return avgKnee;
+
+    if (stateRef.current === "down") {
+      // Keep updating deepest landmarks while going lower
+      if (smoothAngle < minAngleRef.current) {
+        minAngleRef.current      = smoothAngle;
+        deepestLandmarks.current = landmarks; // update to even deeper frame
+      }
+    }
+
+    if (smoothAngle > 160 && stateRef.current === "down") {
+      if (minAngleRef.current < 105) {
+        stateRef.current = "up";
+        countRef.current += 1;
+        const savedMinAngle = minAngleRef.current; // save before resetting
+        const deepLm = deepestLandmarks.current;
+        minAngleRef.current      = 180;
+        deepestLandmarks.current = null;
+
+        cooldownRef.current = true;
+        setTimeout(() => { cooldownRef.current = false; }, 600);
+
+        // Pass savedMinAngle (deepest knee angle) AND deepest landmarks
+        onRep?.(countRef.current, savedMinAngle, deepLm);
+      } else {
+        stateRef.current         = "up";
+        minAngleRef.current      = 180;
+        deepestLandmarks.current = null;
+      }
+    }
+
+    return smoothAngle;
   }, [onRep]);
 
-  return { processLandmarks };
+  const reset = useCallback(() => {
+    stateRef.current         = "up";
+    countRef.current         = 0;
+    angleHistRef.current     = [];
+    cooldownRef.current      = false;
+    minAngleRef.current      = 180;
+    deepestLandmarks.current = null;
+  }, []);
+
+  return { processLandmarks, reset };
 }
 
 // ═══════════════════════════════════════════════
-//  3D SQUAT FIGURE
+//  3D SQUAT FIGURE — clean stick person
+//  Uses only Sphere + Cylinder (Three.js r128 safe)
+//  phase 0 = standing, phase 1 = full squat
 // ═══════════════════════════════════════════════
 function SquatFigure({ phase }) {
-  const groupRef  = useRef();
-  const torsoRef  = useRef();
-  const lThighRef = useRef();
-  const rThighRef = useRef();
-  const lShinRef  = useRef();
-  const rShinRef  = useRef();
-  const lArmRef   = useRef();
-  const rArmRef   = useRef();
+  // All rotations/positions are computed each frame from phase
+  // so the figure always shows a biomechanically correct squat
 
-  useFrame((state) => {
-    const t      = state.clock.elapsedTime;
-    const squat  = phase;
-    if (groupRef.current)  groupRef.current.position.y  = Math.sin(t * 1.2) * 0.02 - squat * 0.55;
-    if (torsoRef.current)  torsoRef.current.rotation.x  = squat * 0.3;
-    if (lThighRef.current) lThighRef.current.rotation.x = squat * 1.4;
-    if (rThighRef.current) rThighRef.current.rotation.x = squat * 1.4;
-    if (lShinRef.current)  lShinRef.current.rotation.x  = -squat * 2.24;
-    if (rShinRef.current)  rShinRef.current.rotation.x  = -squat * 2.24;
-    if (lArmRef.current)   lArmRef.current.rotation.x   = squat * 0.8;
-    if (rArmRef.current)   rArmRef.current.rotation.x   = squat * 0.8;
+  const groupRef = useRef();
+
+  useFrame(() => {
+    if (!groupRef.current) return;
+    // Whole body sinks as we squat (phase 0=standing, 1=full squat)
+    groupRef.current.position.y = -phase * 0.52;
   });
 
+  // Interpolated values for a realistic squat
+  const hipFlex    = phase * 1.18;
+  const kneeFlex   = phase * 2.18;
+  const torsoLean  = phase * 0.32;
+  const armSwing   = phase * 0.70;
+  const ankleAngle = phase * 0.22;
+
+  const mat = (color, roughness = 0.45, metalness = 0.1) => (
+    <meshStandardMaterial color={color} roughness={roughness} metalness={metalness} />
+  );
+
+  // Joint sphere
+  const Joint = ({ pos, r = 0.055, color = "#aaa" }) => (
+    <Sphere args={[r, 10, 10]} position={pos}>
+      <meshStandardMaterial color={color} roughness={0.3} metalness={0.4} />
+    </Sphere>
+  );
+
+  // Limb segment: cylinder between two points
+  const Limb = ({ length, color, radius = 0.045 }) => (
+    <Cylinder args={[radius, radius * 0.9, length, 8]} position={[0, -length / 2, 0]}>
+      {mat(color)}
+    </Cylinder>
+  );
+
   return (
-    <group ref={groupRef} position={[0, 0, 0]}>
-      <Sphere args={[0.18, 16, 16]} position={[0, 1.72, 0]}>
-        <meshStandardMaterial color="#c0876a" roughness={0.6} />
+    <group ref={groupRef} position={[0, -0.90, 0]}>
+
+      {/* HEAD */}
+      <Sphere args={[0.13, 14, 14]} position={[0, 1.68, 0]}>
+        {mat("#d4a88a", 0.65, 0)}
       </Sphere>
-      <Cylinder args={[0.07, 0.07, 0.15, 8]} position={[0, 1.56, 0]}>
-        <meshStandardMaterial color="#c0876a" roughness={0.6} />
-      </Cylinder>
-      <group ref={torsoRef} position={[0, 1.1, 0]}>
-        <Box args={[0.52, 0.62, 0.26]}>
-          <meshStandardMaterial color="#E8192C" roughness={0.4} metalness={0.2} />
-        </Box>
-        <group ref={lArmRef} position={[0.32, 0.22, 0]}>
-          <Cylinder args={[0.07, 0.065, 0.38, 8]} position={[0, -0.19, 0]}>
-            <meshStandardMaterial color="#E8192C" roughness={0.4} />
-          </Cylinder>
-          <Cylinder args={[0.065, 0.055, 0.34, 8]} position={[0, -0.54, 0]}>
-            <meshStandardMaterial color="#c0876a" roughness={0.5} />
-          </Cylinder>
-        </group>
-        <group ref={rArmRef} position={[-0.32, 0.22, 0]}>
-          <Cylinder args={[0.07, 0.065, 0.38, 8]} position={[0, -0.19, 0]}>
-            <meshStandardMaterial color="#E8192C" roughness={0.4} />
-          </Cylinder>
-          <Cylinder args={[0.065, 0.055, 0.34, 8]} position={[0, -0.54, 0]}>
-            <meshStandardMaterial color="#c0876a" roughness={0.5} />
-          </Cylinder>
-        </group>
+
+      {/* NECK */}
+      <group position={[0, 1.58, 0]}>
+        <Limb length={0.10} color="#d4a88a" radius={0.038} />
       </group>
-      <Box args={[0.5, 0.2, 0.26]} position={[0, 0.74, 0]}>
-        <meshStandardMaterial color="#9C1120" roughness={0.5} />
-      </Box>
-      {[0.28, -0.28].map((x, i) => (
-        <Sphere key={i} args={[0.09, 12, 12]} position={[x, 0.74, 0]}>
-          <meshStandardMaterial color="#fff" transparent opacity={0.5} roughness={0.2} metalness={0.6} />
-        </Sphere>
-      ))}
-      {[0.22, -0.22].map((x, i) => (
-        <group key={i} position={[x, 0.64, 0]}>
-          <group ref={i === 0 ? lThighRef : rThighRef}>
-            <Cylinder args={[0.1, 0.09, 0.44, 8]} position={[0, -0.22, 0]}>
-              <meshStandardMaterial color="#c0392b" roughness={0.5} />
+
+      {/* TORSO — leans forward in squat */}
+      <group position={[0, 1.48, 0]} rotation={[torsoLean, 0, 0]}>
+        <Cylinder args={[0.095, 0.11, 0.56, 8]} position={[0, -0.28, 0]}>
+          {mat("#E8192C", 0.4, 0.2)}
+        </Cylinder>
+
+        {/* SHOULDERS */}
+        <Joint pos={[-0.19, 0, 0]} r={0.065} color="#E8192C" />
+        <Joint pos={[ 0.19, 0, 0]} r={0.065} color="#E8192C" />
+
+        {/* LEFT ARM — swings forward during squat */}
+        <group position={[-0.19, 0, 0]} rotation={[-armSwing, 0, 0]}>
+          <Cylinder args={[0.036, 0.032, 0.30, 7]} position={[0, -0.15, 0]}>
+            {mat("#E8192C")}
+          </Cylinder>
+          <Joint pos={[0, -0.30, 0]} r={0.042} color="#ccc" />
+          <group position={[0, -0.30, 0]} rotation={[armSwing * 0.5, 0, 0]}>
+            <Cylinder args={[0.030, 0.025, 0.26, 7]} position={[0, -0.13, 0]}>
+              {mat("#d4a88a")}
             </Cylinder>
-            <Sphere args={[0.1, 12, 12]} position={[0, -0.44, 0]}>
-              <meshStandardMaterial color="#fff" transparent opacity={0.45} roughness={0.2} metalness={0.6} />
-            </Sphere>
-            <group ref={i === 0 ? lShinRef : rShinRef} position={[0, -0.44, 0]}>
-              <Cylinder args={[0.09, 0.075, 0.42, 8]} position={[0, -0.21, 0]}>
-                <meshStandardMaterial color="#9C1120" roughness={0.5} />
+          </group>
+        </group>
+
+        {/* RIGHT ARM */}
+        <group position={[0.19, 0, 0]} rotation={[-armSwing, 0, 0]}>
+          <Cylinder args={[0.036, 0.032, 0.30, 7]} position={[0, -0.15, 0]}>
+            {mat("#E8192C")}
+          </Cylinder>
+          <Joint pos={[0, -0.30, 0]} r={0.042} color="#ccc" />
+          <group position={[0, -0.30, 0]} rotation={[armSwing * 0.5, 0, 0]}>
+            <Cylinder args={[0.030, 0.025, 0.26, 7]} position={[0, -0.13, 0]}>
+              {mat("#d4a88a")}
+            </Cylinder>
+          </group>
+        </group>
+
+        {/* HIP JOINT (bottom of torso) */}
+        <Joint pos={[-0.10, -0.56, 0]} r={0.058} color="#9C1120" />
+        <Joint pos={[ 0.10, -0.56, 0]} r={0.058} color="#9C1120" />
+      </group>
+
+      {/* HIPS / PELVIS origin */}
+      <group position={[0, 0.92, 0]}>
+
+        {/* LEFT LEG */}
+        <group position={[-0.10, 0, 0]}>
+          {/* Thigh — rotates on hip flex */}
+          <group rotation={[hipFlex, 0, 0.04]}>
+            <Cylinder args={[0.072, 0.062, 0.42, 8]} position={[0, -0.21, 0]}>
+              {mat("#c0392b")}
+            </Cylinder>
+            <Joint pos={[0, -0.42, 0]} r={0.062} color="#888" />
+            {/* Shin — rotates from knee */}
+            <group position={[0, -0.42, 0]} rotation={[-kneeFlex, 0, 0]}>
+              <Cylinder args={[0.058, 0.046, 0.40, 8]} position={[0, -0.20, 0]}>
+                {mat("#9C1120")}
               </Cylinder>
-              <Box args={[0.12, 0.07, 0.24]} position={[0, -0.45, 0.06]}>
-                <meshStandardMaterial color="#333" roughness={0.7} />
-              </Box>
+              <Joint pos={[0, -0.40, 0]} r={0.048} color="#666" />
+              {/* Foot */}
+              <group position={[0, -0.40, 0]} rotation={[-ankleAngle, 0, 0]}>
+                <Cylinder args={[0.040, 0.035, 0.08, 7]} position={[0, -0.04, 0]}>
+                  {mat("#555")}
+                </Cylinder>
+                <Cylinder args={[0.025, 0.025, 0.18, 7]}
+                  position={[0, -0.075, 0.09]}
+                  rotation={[Math.PI / 2, 0, 0]}>
+                  {mat("#333")}
+                </Cylinder>
+              </group>
             </group>
           </group>
         </group>
-      ))}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.62, 0]}>
-        <circleGeometry args={[0.45, 32]} />
-        <meshBasicMaterial color="#E8192C" transparent opacity={0.08} />
+
+        {/* RIGHT LEG (mirror) */}
+        <group position={[0.10, 0, 0]}>
+          <group rotation={[hipFlex, 0, -0.04]}>
+            <Cylinder args={[0.072, 0.062, 0.42, 8]} position={[0, -0.21, 0]}>
+              {mat("#c0392b")}
+            </Cylinder>
+            <Joint pos={[0, -0.42, 0]} r={0.062} color="#888" />
+            <group position={[0, -0.42, 0]} rotation={[-kneeFlex, 0, 0]}>
+              <Cylinder args={[0.058, 0.046, 0.40, 8]} position={[0, -0.20, 0]}>
+                {mat("#9C1120")}
+              </Cylinder>
+              <Joint pos={[0, -0.40, 0]} r={0.048} color="#666" />
+              <group position={[0, -0.40, 0]} rotation={[-ankleAngle, 0, 0]}>
+                <Cylinder args={[0.040, 0.035, 0.08, 7]} position={[0, -0.04, 0]}>
+                  {mat("#555")}
+                </Cylinder>
+                <Cylinder args={[0.025, 0.025, 0.18, 7]}
+                  position={[0, -0.075, 0.09]}
+                  rotation={[Math.PI / 2, 0, 0]}>
+                  {mat("#333")}
+                </Cylinder>
+              </group>
+            </group>
+          </group>
+        </group>
+      </group>
+
+      {/* Shadow disc */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.88, 0]}>
+        <circleGeometry args={[0.38, 32]} />
+        <meshBasicMaterial color="#E8192C" transparent opacity={0.07} />
       </mesh>
     </group>
   );
@@ -319,12 +585,13 @@ function SquatFigure({ phase }) {
 function SquatScene({ phase }) {
   return (
     <>
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[3, 5, 3]} intensity={1.2} />
-      <pointLight position={[-2, 3, -2]} intensity={0.6} color="#E8192C" />
+      <ambientLight intensity={0.65} />
+      <directionalLight position={[4, 6, 4]} intensity={1.4} castShadow />
+      <pointLight position={[-3, 4, -2]} intensity={0.5} color="#E8192C" />
+      <pointLight position={[3, 2, 3]}   intensity={0.3} color="#fff" />
       <SquatFigure phase={phase} />
-      <OrbitControls enablePan={false} minDistance={2.5} maxDistance={6} autoRotate autoRotateSpeed={1.2} />
-      <gridHelper args={[4, 16, "#222228", "#1a1a1f"]} position={[0, -0.63, 0]} />
+      <OrbitControls enablePan={false} minDistance={2.2} maxDistance={5.5} autoRotate autoRotateSpeed={0.8} />
+      <gridHelper args={[4, 20, "#1e1e24", "#19191f"]} position={[0, -0.88, 0]} />
     </>
   );
 }
@@ -370,7 +637,7 @@ function HologramModal({ onClose, phase }) {
           <button onClick={onClose} style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text-dim)", width: 28, height: 28, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
         <div style={{ height: 480 }}>
-          <Canvas camera={{ position: [0, 1, 3.5], fov: 50 }} style={{ background: "var(--bg)" }}>
+          <Canvas camera={{ position: [0, 0.4, 3.5], fov: 50 }} style={{ background: "var(--bg)" }}>
             <Suspense fallback={null}><SquatScene phase={phase} /></Suspense>
           </Canvas>
         </div>
@@ -411,12 +678,113 @@ export default function Workout() {
   const [feedback,     setFeedback]     = useState([]);
   const [camError,     setCamError]     = useState("");
   const [saving,       setSaving]       = useState(false);
+  // Voice: default ON (respects profile setting if available)
+  const [voiceEnabled, setVoiceEnabled] = useState(
+    userProfile?.soundFeedback !== false
+  );
+
+  // ── KAI SENSE — Web Bluetooth ──────────────────
+  // BLE UUIDs — must match Arduino code exactly
+  const BLE_SERVICE     = "12345678-1234-1234-1234-123456789abc";
+  const BLE_CHAR_ACCEL  = "12345678-1234-1234-1234-123456789001";
+  const BLE_CHAR_GYRO   = "12345678-1234-1234-1234-123456789002";
+
+  const [sensorData,   setSensorData]   = useState(null);
+  const [sensorOnline, setSensorOnline] = useState(false);
+  const [hipLean,      setHipLean]      = useState(0);
+  const [bleConnecting,setBleConnecting]= useState(false);
+  const bleDeviceRef   = useRef(null);
+
+  // Parse 3× int16 from BLE DataView → {x, y, z}
+  const parseXYZ = (dataView) => ({
+    x: dataView.getInt16(0, true),
+    y: dataView.getInt16(2, true),
+    z: dataView.getInt16(4, true),
+  });
+
+  // Compute hip lean from accel (device worn on lower back/hip)
+  const computeHipLean = (accel) => {
+    const { x, y, z } = accel;
+    return Math.round(Math.atan2(x, Math.sqrt(y * y + z * z)) * (180 / Math.PI));
+  };
+
+  const connectBLE = async () => {
+    if (!navigator.bluetooth) {
+      alert("Web Bluetooth not supported in this browser.\nUse Chrome on Android or desktop Chrome.");
+      return;
+    }
+    setBleConnecting(true);
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ name: "KAI_SENSE" }],
+        optionalServices: [BLE_SERVICE],
+      });
+      bleDeviceRef.current = device;
+
+      device.addEventListener("gattserverdisconnected", () => {
+        setSensorOnline(false);
+        setSensorData(null);
+      });
+
+      const server  = await device.gatt.connect();
+      const service = await server.getPrimaryService(BLE_SERVICE);
+
+      // Subscribe to accelerometer notifications
+      const accelChar = await service.getCharacteristic(BLE_CHAR_ACCEL);
+      await accelChar.startNotifications();
+      accelChar.addEventListener("characteristicvaluechanged", (e) => {
+        const accel = parseXYZ(e.target.value);
+        setSensorData((prev) => ({ ...prev, accel }));
+        setHipLean(computeHipLean(accel));
+      });
+
+      // Subscribe to gyro notifications
+      const gyroChar = await service.getCharacteristic(BLE_CHAR_GYRO);
+      await gyroChar.startNotifications();
+      gyroChar.addEventListener("characteristicvaluechanged", (e) => {
+        const gyro = parseXYZ(e.target.value);
+        setSensorData((prev) => ({ ...prev, gyro }));
+      });
+
+      setSensorOnline(true);
+      speak("KAI SENSE connected.", false);
+    } catch (e) {
+      if (e.name !== "NotFoundError") {
+        console.error("BLE error:", e);
+      }
+    } finally {
+      setBleConnecting(false);
+    }
+  };
+
+  const disconnectBLE = () => {
+    bleDeviceRef.current?.gatt?.disconnect();
+    setSensorOnline(false);
+    setSensorData(null);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => () => disconnectBLE(), []);
+
+  // TTS engine
+  const { speak, stop: stopTTS, unlock: unlockTTS } = useTTS(voiceEnabled);
+  // Keep a ref to speak so handleRep always calls the latest version
+  const speakRef = useRef(speak);
+  useEffect(() => { speakRef.current = speak; }, [speak]);
+
+  // Track last spoken cue to avoid repeating same issue every rep
+  const lastFormCueRef  = useRef("");
+  const lastFormCueTime = useRef(0);
 
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
   const timerRef  = useRef(null);
   const repsRef   = useRef(0);
   const setsRef   = useRef(0);
+  // Keep a ref to isRunning so pose callbacks never stale-close over it
+  // (avoids MediaPipe restarting every time start/pause is toggled)
+  const isRunningRef = useRef(false);
+  useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
 
   // Sync refs
   useEffect(() => { repsRef.current = reps; }, [reps]);
@@ -429,14 +797,18 @@ export default function Workout() {
     return ()    => clearInterval(timerRef.current);
   }, [isRunning]);
 
-  // Rep callback — receives rep count, knee angle, AND full landmarks for per-joint analysis
+  // Rep callback — per-joint analysis + optimised voice feedback
   const handleRep = useCallback((count, kneeAngle, landmarks) => {
     setReps(count);
-    if (count % 5 === 0) setSets((s) => s + 1);
+    const isNewSet = count % 5 === 0;
+    if (isNewSet) setSets((s) => s + 1);
+
     const score = Math.min(99, Math.max(55, Math.round(100 - Math.abs(kneeAngle - 90) * 0.3)));
     setFormScore(score);
     setSquatPhase(0);
 
+    // ── Per-joint scores ──────────────────────
+    let joints = { hipDepth: 0, kneeTrack: 0, backAngle: 0, barPath: 0 };
     if (landmarks) {
       const lm = landmarks;
       const angle3 = (A, B, C) => {
@@ -446,29 +818,112 @@ export default function Workout() {
         const mag = Math.sqrt(ab.x**2 + ab.y**2) * Math.sqrt(cb.x**2 + cb.y**2);
         return (Math.acos(Math.max(-1, Math.min(1, dot / (mag || 1))))) * (180 / Math.PI);
       };
-      const avgHipAngle  = (angle3(11,23,25) + angle3(12,24,26)) / 2;
-      const hipDepth     = Math.min(99, Math.max(40, Math.round(100 - Math.abs(avgHipAngle - 90) * 0.9)));
-      const avgDev       = (Math.abs(lm[25].x - lm[27].x) + Math.abs(lm[26].x - lm[28].x)) / 2;
-      const kneeTrack    = Math.min(99, Math.max(40, Math.round(99 - avgDev * 250)));
-      const avgBack      = (angle3(11,23,25) + angle3(12,24,26)) / 2;
-      const backAngle    = Math.min(99, Math.max(40, Math.round(99 - Math.max(0, 170 - avgBack) * 1.5)));
+      // ── Correct joint calculations ────────────
+      // MediaPipe landmark indices:
+      // 11/12 = shoulders, 23/24 = hips, 25/26 = knees, 27/28 = ankles
+
+      // HIP DEPTH — measured from deepest frame of squat
+      // landmarks are from bottom of squat, so knee angle should be ~85-100° for good depth
+      // 85° or less = perfect (99), 100° = good (87), 120° = shallow (55), 140°+ = bad (30)
+      const leftKneeAngle  = angle3(23, 25, 27);
+      const rightKneeAngle = angle3(24, 26, 28);
+      const avgKneeAngle   = (leftKneeAngle + rightKneeAngle) / 2;
+      const hipDepthScore  = Math.min(99, Math.max(30,
+        Math.round(99 - Math.max(0, avgKneeAngle - 82) * 2.0)
+      ));
+
+      // KNEE TRACKING — knees should stay over toes (knee x ≈ ankle x)
+      // Measure horizontal deviation between knee and ankle in normalised coords
+      const leftKneeDev  = Math.abs(lm[25].x - lm[27].x);
+      const rightKneeDev = Math.abs(lm[26].x - lm[28].x);
+      const avgDev       = (leftKneeDev + rightKneeDev) / 2;
+      const kneeScore    = Math.min(99, Math.max(30, Math.round(99 - avgDev * 280)));
+
+      // BACK ANGLE — torso should stay upright
+      // Use shoulder→hip vertical: angle between (shoulder-hip) vector and straight up
+      // Good upright posture: vector points nearly straight up = small angle from vertical
+      const leftTorsoX  = lm[11].x - lm[23].x;
+      const leftTorsoY  = lm[11].y - lm[23].y; // negative = shoulder above hip (correct)
+      const rightTorsoX = lm[12].x - lm[24].x;
+      const rightTorsoY = lm[12].y - lm[24].y;
+      // Angle from vertical (0 = perfectly upright)
+      const leftLean  = Math.abs(Math.atan2(leftTorsoX,  -leftTorsoY)  * (180 / Math.PI));
+      const rightLean = Math.abs(Math.atan2(rightTorsoX, -rightTorsoY) * (180 / Math.PI));
+      const avgLean   = (leftLean + rightLean) / 2;
+      // 0° lean = 99, 20° = ~79, 40°+ = ~55
+      const backScore  = Math.min(99, Math.max(30, Math.round(99 - avgLean * 1.1)));
+
+      // BAR PATH — shoulder symmetry (left/right height difference)
       const shoulderTilt = Math.abs(lm[11].y - lm[12].y);
-      const barPath      = Math.min(99, Math.max(40, Math.round(99 - shoulderTilt * 500)));
-      setJointScores({ hipDepth, kneeTrack, backAngle, barPath });
+      const barScore     = Math.min(99, Math.max(30, Math.round(99 - shoulderTilt * 500)));
+
+      joints = {
+        hipDepth:  hipDepthScore,
+        kneeTrack: kneeScore,
+        backAngle: backScore,
+        barPath:   barScore,
+      };
+      setJointScores(joints);
     }
 
-    const msgs = [
-      score >= 85 ? "✅ Great depth — keep pushing!"  : "⚠ Try to go a bit deeper",
-      score >= 80 ? "✅ Knees tracking well"           : "⚠ Left knee caving slightly",
-      score >= 85 ? "✅ Hip crease below parallel"     : "⚠ Open hips a little wider",
-      "✅ Good bar path — stay upright",
-      score >= 80 ? "✅ Core braced nicely"            : "⚠ Brace your core harder",
-    ];
+    // ── Optimised visual feedback message ─────
+    // Priority: worst joint first, then overall score, then encouragement
+    const issues = [
+      { joint: "hipDepth",  score: joints.hipDepth,  label: "Hip Depth",  icon: "🟡" },
+      { joint: "kneeTrack", score: joints.kneeTrack, label: "Knee Track", icon: "🟡" },
+      { joint: "backAngle", score: joints.backAngle, label: "Back Angle", icon: "🟡" },
+      { joint: "barPath",   score: joints.barPath,   label: "Bar Path",   icon: "🟡" },
+    ].filter((j) => j.score < 80 && j.score > 0)
+     .sort((a, b) => a.score - b.score); // worst first
+
+    let visualMsg;
+    let voiceMsg = null;
+    const now = Date.now();
+
+    if (issues.length === 0 || score >= 85) {
+      // Perfect rep
+      visualMsg = `✅ Rep ${count} — great form!`;
+      if (count % 3 === 0) voiceMsg = VOICE_CUES.overallGood();
+    } else {
+      // Has issues — show worst one
+      const worst = issues[0];
+      const cueMap = {
+        hipDepth:  VOICE_CUES.hipDepth,
+        kneeTrack: VOICE_CUES.kneeTrack,
+        backAngle: VOICE_CUES.backAngle,
+        barPath:   VOICE_CUES.barPath,
+      };
+      const rawCue = cueMap[worst.joint]?.(worst.score);
+      visualMsg = `⚠ ${worst.label}: ${worst.score}% — ${rawCue || "needs work"}`;
+
+      // Voice: only speak if different from last cue OR >6 seconds passed
+      const isDifferent = rawCue !== lastFormCueRef.current;
+      const isStale     = now - lastFormCueTime.current > 6000;
+      if (rawCue && (isDifferent || isStale)) {
+        voiceMsg = rawCue;
+        lastFormCueRef.current  = rawCue;
+        lastFormCueTime.current = now;
+      }
+    }
+
+    // Rep milestone voice (always speak, highest priority)
+    const milestone = VOICE_CUES.repMilestone(count);
+    if (milestone) {
+      speakRef.current(milestone, true);
+    } else if (isNewSet) {
+      speakRef.current(VOICE_CUES.setComplete(count / 5), true);
+    } else if (voiceMsg) {
+      speakRef.current(voiceMsg, issues.length > 0 && issues[0].score < 65);
+    } else if (count % 8 === 0) {
+      speakRef.current(VOICE_CUES.encourage());
+    }
+
+    // Update visual log
     setFeedback((prev) => [
-      { id: Date.now(), msg: msgs[count % msgs.length], time: new Date().toLocaleTimeString() },
-      ...prev.slice(0, 6),
+      { id: Date.now(), msg: visualMsg, score, time: new Date().toLocaleTimeString() },
+      ...prev.slice(0, 7),
     ]);
-  }, []);
+  }, []); // empty deps — uses refs only
 
   // Squat phase animation (visual only)
   const squatPhaseRef = useRef(0);
@@ -487,32 +942,32 @@ export default function Workout() {
     return () => cancelAnimationFrame(raf);
   }, [isRunning, mode]);
 
-  // Pose result handler
+  // Pose result handler — uses isRunningRef so this callback NEVER changes
+  // and MediaPipe never restarts when start/pause is toggled
   const handlePoseResult = useCallback((results) => {
     if (results.error) {
       setCamError(results.error);
       return;
     }
-    if (!isRunning) return;
+    if (!isRunningRef.current) return;
     if (results.poseLandmarks) {
       const lm = results.poseLandmarks;
-      // Estimate squat phase from hip/knee y diff
       const hipY  = (lm[23]?.y + lm[24]?.y) / 2;
       const kneeY = (lm[25]?.y + lm[26]?.y) / 2;
       const phase = Math.max(0, Math.min(1, (kneeY - hipY) / 0.3));
       setSquatPhase(phase);
     }
-  }, [isRunning]);
+  }, []); // ← empty deps: this function never changes reference
 
-  const { processLandmarks } = useSquatCounter(handleRep);
+  const { processLandmarks, reset: resetCounter } = useSquatCounter(handleRep);
 
-  // Combine pose result with squat counting
+  // Combine pose result with squat counting — stable reference, never recreated
   const handlePoseFull = useCallback((results) => {
     handlePoseResult(results);
-    if (results.poseLandmarks && isRunning) {
+    if (results.poseLandmarks && isRunningRef.current) {
       processLandmarks(results.poseLandmarks);
     }
-  }, [handlePoseResult, processLandmarks, isRunning]);
+  }, [handlePoseResult, processLandmarks]); // no isRunning dep → stable
 
   useMediaPipePose({
     videoRef,
@@ -551,17 +1006,21 @@ export default function Workout() {
 
   const handleStart = () => {
     if (mode === "laptop" && !camActive) setCamActive(true);
+    unlockTTS();
+    // Small delay so unlock utterance finishes before real speech
+    setTimeout(() => speak("Session started. Begin squatting.", false), 300);
     setIsRunning(true);
   };
 
-  const handlePause = () => setIsRunning(false);
+  const handlePause = () => { setIsRunning(false); stopTTS(); };
 
   const handleReset = () => {
-    setIsRunning(false); setCamActive(false);
+    setIsRunning(false); setCamActive(false); stopTTS(); resetCounter();
     setReps(0); setSets(0); setElapsed(0);
     setFormScore(0); setSquatPhase(0);
     setJointScores({ hipDepth: 0, kneeTrack: 0, backAngle: 0, barPath: 0 });
     setFeedback([]); setCamError("");
+    lastFormCueRef.current = "";
   };
 
   const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
@@ -577,7 +1036,7 @@ export default function Workout() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {[
             { id: "laptop",  label: "📷 DEVICE MODE",        desc: "Camera · MediaPipe AI"          },
-            { id: "product", label: "📦 KAI SENSE + CORE",   desc: "ESP32-CAM · MPU6050 (coming soon)" },
+            { id: "product", label: "📦 KAI SENSE + CORE",   desc: sensorOnline ? "🟢 Connected · MPU6050 live" : "ESP32-CAM · MPU6050 (tap to connect)" },
           ].map((m) => (
             <motion.button key={m.id} whileTap={{ scale: 0.97 }}
               onClick={() => { if (isRunning) return; setMode(m.id); setCamActive(false); setCamError(""); }}
@@ -609,6 +1068,13 @@ export default function Workout() {
             onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--border-md)"; e.currentTarget.style.color = "var(--text)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)";    e.currentTarget.style.color = "var(--text-dim)"; }}>
             ↺ RESET
+          </motion.button>
+          {/* Voice toggle — always visible, never affects MediaPipe */}
+          <motion.button whileTap={{ scale: 0.92 }}
+            onClick={() => setVoiceEnabled((v) => !v)}
+            title={voiceEnabled ? "Voice feedback ON — click to mute" : "Voice feedback OFF — click to enable"}
+            style={{ width: 36, height: 36, background: voiceEnabled ? "rgba(34,197,94,0.1)" : "var(--surface2)", border: `1px solid ${voiceEnabled ? "rgba(34,197,94,0.4)" : "var(--border)"}`, borderRadius: "var(--radius-sm)", color: voiceEnabled ? "var(--success)" : "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, transition: "all 0.2s", flexShrink: 0 }}>
+            {voiceEnabled ? "🔊" : "🔇"}
           </motion.button>
           {reps > 0 && !isRunning && (
             <motion.button whileTap={{ scale: 0.95 }} onClick={saveSession} disabled={saving}
@@ -726,20 +1192,43 @@ export default function Workout() {
           {/* AI Feedback Log */}
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.25 }}
             style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: 16 }}>
-            <div style={{ fontFamily: "var(--font-display)", fontSize: 16, letterSpacing: 2, color: "var(--text-dim)", marginBottom: 12 }}>AI FORM FEEDBACK</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 7, minHeight: 70 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 16, letterSpacing: 2, color: "var(--text-dim)" }}>AI FORM FEEDBACK</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {/* Live voice status badge */}
+                <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 20, background: voiceEnabled ? "rgba(34,197,94,0.1)" : "var(--surface3)", border: `1px solid ${voiceEnabled ? "rgba(34,197,94,0.3)" : "var(--border)"}` }}>
+                  <div style={{ width: 5, height: 5, borderRadius: "50%", background: voiceEnabled ? "var(--success)" : "var(--text-muted)", animation: voiceEnabled && isRunning ? "pulse 2s infinite" : "none" }} />
+                  <span style={{ fontSize: 9, fontFamily: "var(--font-mono)", color: voiceEnabled ? "var(--success)" : "var(--text-muted)", letterSpacing: 0.5 }}>
+                    {voiceEnabled ? "VOICE ON" : "VOICE OFF"}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, minHeight: 70 }}>
               <AnimatePresence>
                 {feedback.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-                    {mode === "laptop" ? "Start camera and begin squatting — AI will analyse your form in real time." : "Start a session to receive form feedback."}
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)", lineHeight: 1.6 }}>
+                    {mode === "laptop"
+                      ? `Start camera and begin squatting — AI analyses your form and ${voiceEnabled ? "speaks corrections aloud" : "shows them here"}.`
+                      : "Start a session to receive form feedback."}
                   </div>
-                ) : feedback.map((f) => (
-                  <motion.div key={f.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, height: 0 }}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: 12 }}>
-                    <span style={{ flex: 1 }}>{f.msg}</span>
-                    <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>{f.time}</span>
-                  </motion.div>
-                ))}
+                ) : feedback.map((f) => {
+                  const isGood = f.msg.startsWith("✅");
+                  const isBad  = f.msg.startsWith("⚠");
+                  return (
+                    <motion.div key={f.id}
+                      initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, height: 0 }}
+                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: isGood ? "rgba(34,197,94,0.05)" : isBad ? "rgba(232,25,44,0.05)" : "var(--surface2)", borderRadius: "var(--radius-sm)", border: `1px solid ${isGood ? "rgba(34,197,94,0.2)" : isBad ? "var(--border-red)" : "var(--border)"}`, fontSize: 12 }}>
+                      <span style={{ flex: 1, color: isGood ? "var(--success)" : isBad ? "var(--text)" : "var(--text-dim)" }}>{f.msg}</span>
+                      {f.score > 0 && (
+                        <span style={{ fontSize: 10, fontFamily: "var(--font-display)", color: f.score >= 85 ? "var(--success)" : f.score >= 70 ? "var(--warning)" : "var(--red)", flexShrink: 0, letterSpacing: 0.5 }}>
+                          {f.score}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>{f.time}</span>
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
             </div>
           </motion.div>
@@ -769,6 +1258,20 @@ export default function Workout() {
                   </div>
                 </div>
               ))}
+              {/* Hip lean from KAI SENSE accelerometer */}
+              {mode === "product" && sensorOnline && (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-dim)", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
+                    <span>Hip Lean <span style={{ fontSize: 8, color: "var(--text-muted)" }}>KAI SENSE</span></span>
+                    <span style={{ color: Math.abs(hipLean) <= 8 ? "var(--success)" : Math.abs(hipLean) <= 15 ? "var(--warning)" : "var(--red)" }}>
+                      {hipLean > 0 ? "+" : ""}{hipLean}°
+                    </span>
+                  </div>
+                  <div className="progress-track">
+                    <div style={{ height: "100%", width: `${Math.min(100, Math.abs(hipLean) * 3)}%`, background: Math.abs(hipLean) <= 8 ? "var(--success)" : Math.abs(hipLean) <= 15 ? "var(--warning)" : "var(--red)", borderRadius: 2, transition: "all 0.3s" }} />
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
 
@@ -782,7 +1285,7 @@ export default function Workout() {
               <span className="badge badge-red">CLICK TO EXPAND</span>
             </div>
             <div style={{ height: 200 }}>
-              <Canvas camera={{ position: [0, 1, 3.2], fov: 50 }} style={{ background: "var(--bg)" }}>
+              <Canvas camera={{ position: [0, 0.4, 3.2], fov: 50 }} style={{ background: "var(--bg)" }}>
                 <Suspense fallback={null}><SquatScene phase={squatPhase} /></Suspense>
               </Canvas>
             </div>
@@ -797,12 +1300,84 @@ export default function Workout() {
           <AnimatePresence>
             {mode === "product" && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: 16, overflow: "hidden" }}>
-                <div style={{ fontFamily: "var(--font-display)", fontSize: 14, letterSpacing: 2, color: "var(--text-dim)", marginBottom: 10 }}>KAI CORE SENSORS</div>
-                <div style={{ padding: "10px 12px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: 11, color: "var(--warning)", fontFamily: "var(--font-mono)", lineHeight: 1.6 }}>
-                  ⚙️ KAI CORE (MPU6050 + Ultrasonic) hardware integration pending.<br />
-                  Configure device IP in Profile → Hardware Config.
+                style={{ background: "var(--surface)", border: `1px solid ${sensorOnline ? "rgba(34,197,94,0.3)" : "var(--border)"}`, borderRadius: "var(--radius-lg)", padding: 16, overflow: "hidden" }}>
+
+                {/* Header + status */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontFamily: "var(--font-display)", fontSize: 14, letterSpacing: 2, color: "var(--text-dim)" }}>KAI SENSE</div>
+                    <div style={{ fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 2 }}>MPU6050 · Bluetooth LE</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: sensorOnline ? "var(--success)" : "var(--text-muted)", animation: sensorOnline ? "ping 2s infinite" : "none" }} />
+                      <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: sensorOnline ? "var(--success)" : "var(--text-muted)" }}>
+                        {bleConnecting ? "PAIRING…" : sensorOnline ? "CONNECTED" : "NOT CONNECTED"}
+                      </span>
+                    </div>
+                    {sensorOnline ? (
+                      <motion.button whileTap={{ scale: 0.96 }} onClick={disconnectBLE}
+                        style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border-red)", borderRadius: "var(--radius-sm)", color: "var(--red)", fontFamily: "var(--font-mono)", fontSize: 9, cursor: "pointer", letterSpacing: 0.5 }}>
+                        DISCONNECT
+                      </motion.button>
+                    ) : (
+                      <motion.button whileTap={{ scale: 0.96 }} onClick={connectBLE} disabled={bleConnecting}
+                        style={{ padding: "5px 12px", background: bleConnecting ? "var(--surface3)" : "var(--red)", border: "none", borderRadius: "var(--radius-sm)", color: "#fff", fontFamily: "var(--font-mono)", fontSize: 9, cursor: bleConnecting ? "not-allowed" : "pointer", letterSpacing: 0.5, display: "flex", alignItems: "center", gap: 5 }}>
+                        {bleConnecting ? <><div className="spinner" style={{ width: 10, height: 10 }} /> PAIRING</> : "⚡ CONNECT"}
+                      </motion.button>
+                    )}
+                  </div>
                 </div>
+
+                {!sensorOnline ? (
+                  <div style={{ padding: "10px 12px", background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 11, color: "var(--text-dim)", fontFamily: "var(--font-mono)", lineHeight: 1.7 }}>
+                    1. Power on KAI SENSE device<br />
+                    2. Strap it to your lower back / hip<br />
+                    3. Tap <span style={{ color: "var(--red)" }}>⚡ CONNECT</span> above to pair via Bluetooth<br />
+                    <span style={{ fontSize: 9, color: "var(--text-muted)" }}>Requires Chrome browser · Bluetooth must be on</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Hip lean bar */}
+                    <div style={{ marginBottom: 12, padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-md)", border: `1px solid ${Math.abs(hipLean) > 15 ? "var(--border-red)" : "var(--border)"}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
+                        <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-dim)", letterSpacing: 0.5 }}>HIP LEAN</span>
+                        <span style={{ fontFamily: "var(--font-display)", fontSize: 20, color: Math.abs(hipLean) > 15 ? "var(--red)" : Math.abs(hipLean) > 8 ? "var(--warning)" : "var(--success)", letterSpacing: 1 }}>
+                          {hipLean > 0 ? "+" : ""}{hipLean}°
+                        </span>
+                      </div>
+                      <div style={{ position: "relative", height: 6, background: "var(--surface3)", borderRadius: 3 }}>
+                        <div style={{ position: "absolute", left: "50%", top: 0, height: "100%", width: 2, background: "var(--border-md)" }} />
+                        <motion.div animate={{ left: hipLean < 0 ? `${50 + Math.max(-50, hipLean * 1.5)}%` : "50%", right: hipLean > 0 ? `${50 - Math.min(50, hipLean * 1.5)}%` : "50%" }}
+                          transition={{ duration: 0.1 }}
+                          style={{ position: "absolute", height: "100%", borderRadius: 3, background: Math.abs(hipLean) > 15 ? "var(--red)" : Math.abs(hipLean) > 8 ? "var(--warning)" : "var(--success)" }} />
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3, fontSize: 9, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                        <span>← LEFT</span><span>NEUTRAL</span><span>RIGHT →</span>
+                      </div>
+                      {Math.abs(hipLean) > 15 && isRunning && (
+                        <div style={{ marginTop: 6, fontSize: 10, color: "var(--red)", fontFamily: "var(--font-mono)" }}>⚠ Hip tilt — keep hips level</div>
+                      )}
+                    </div>
+
+                    {/* Raw sensor values */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+                      {[
+                        { label: "AX", val: sensorData?.accel?.x ?? 0, color: "var(--red)"     },
+                        { label: "AY", val: sensorData?.accel?.y ?? 0, color: "var(--warning)"  },
+                        { label: "AZ", val: sensorData?.accel?.z ?? 0, color: "var(--success)"  },
+                        { label: "GX", val: sensorData?.gyro?.x  ?? 0, color: "var(--info)"     },
+                        { label: "GY", val: sensorData?.gyro?.y  ?? 0, color: "var(--info)"     },
+                        { label: "GZ", val: sensorData?.gyro?.z  ?? 0, color: "var(--info)"     },
+                      ].map((s) => (
+                        <div key={s.label} style={{ padding: "6px 8px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", textAlign: "center" }}>
+                          <div style={{ fontSize: 8, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 2 }}>{s.label}</div>
+                          <div style={{ fontFamily: "var(--font-display)", fontSize: 12, color: s.color }}>{s.val.toLocaleString()}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

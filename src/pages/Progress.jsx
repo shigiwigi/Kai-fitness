@@ -14,7 +14,7 @@ import {
   collection, addDoc, query, orderBy,
   onSnapshot, serverTimestamp, limit,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../lib/firebase";
 import { useAuth } from "../context/AuthContext";
 
 // ─── Helpers ─────────────────────────────────────
